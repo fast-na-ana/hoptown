@@ -186,6 +186,7 @@ export class PlantMode {
       // charge pickup
       if (this.ch.s === 'dropped') {
         for (const p of this._alive(this.atk)) {
+          if (this.ch.np === p.id && g.time < this.ch.npT) continue;   // the dropper can't instantly re-grab it
           const pp = g.posOf(p);
           if (Math.hypot(pp[0] - this.ch.p[0], pp[1] - this.ch.p[1], pp[2] - this.ch.p[2]) < PLANT.pickup) { this.ch = { s: 'carried', c: p.id, p: null, site: null }; this._send('pick', p.id); break; }
         }
@@ -319,6 +320,7 @@ export class PlantMode {
     if (d.ev === 'blown' || (this.ch.s === 'blown' && prevCh !== 'blown')) this._blast();
     if (d.ev === 'end' || (d.ph === 'post' && prevPh !== 'post')) this._onEnd();
     if (d.ev === 'swap') this._event('swap');
+    if (d.ev === 'drop' && d.by) { const p = this.g.players.get(d.by); if (p && p.team === this.g.local.team) this.g.hud.feedText(`${p.name} dropped the charge`, '#ffd60a'); }
     if (d.ev === 'pick') { const p = this.g.players.get(d.by); if (p && p.team === this.g.local.team) this.g.hud.feedText(`${p.name} picked up the charge`, '#ffd60a'); }
   }
   onEcon(e) {
@@ -346,13 +348,13 @@ export class PlantMode {
     if (L.team) {
       const role = L.team === this.atk ? 'ATTACK' : 'DEFEND';
       g.hud.announce(`ROUND ${this.round} · ${role}`, L.team === this.atk ? (this.ch.c === L.id ? 'You carry the charge. Plant it at A or B.' : 'Get the charge to a site. B to buy.') : 'Hold both sites. B to buy.');
-      if (!g.panelOpen) g.panelOpen = 'buy';
+      if (!g.panelOpen) g.setPanel('buy');
     }
     sfx.tick();
   }
   _onLive() {
     const g = this.g;
-    if (g.panelOpen === 'buy') g.panelOpen = null;
+    if (g.panelOpen === 'buy') g.setPanel(null);
     sfx.go();
   }
   _onPlanted(by) {
@@ -423,6 +425,27 @@ export class PlantMode {
       }
     } else this.hold = null;
     return !!this.hold;
+  }
+
+  // X: throw the charge a couple of metres ahead so a teammate can grab it
+  drop(p) {
+    if (this.ch.s !== 'carried' || this.ch.c !== p.id || this.ph === 'post') return;
+    const g = this.g;
+    if (g.isHost) this.hostDrop(p.id); else if (g.net) g.net.send('pdrop', {}, g.hostId);
+  }
+  hostDrop(id) {
+    const g = this.g, p = g.players.get(id);
+    if (!p || this.ch.s !== 'carried' || this.ch.c !== id) return;
+    const pos = g.posOf(p), fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
+    let x = pos[0], z = pos[2];
+    for (let d = 1.8; d > 0; d -= 0.3) {     // as far ahead as the walls allow
+      const h = g.world.raycast(pos[0], pos[1] + 0.6, pos[2], fx, 0, fz, d + 0.3);
+      if (!h) { x = pos[0] + fx * d; z = pos[2] + fz * d; break; }
+    }
+    const down = g.world.raycast(x, pos[1] + 0.6, z, 0, -1, 0, 6);
+    const y = down ? pos[1] + 0.6 - down.t : pos[1];
+    this.ch = { s: 'dropped', c: null, p: [r2(x), r2(y), r2(z)], site: null, np: id, npT: g.time + 1.2 };
+    this._send('drop', id);
   }
 
   // bots: host drives their plant / defuse holds

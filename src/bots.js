@@ -91,6 +91,20 @@ export class Bot {
     }
   }
 
+  // Wedged somewhere the nav graph can't recover from: put the bot back on the nearest walkable node.
+  _rescue() {
+    const g = this.g, p = this.p, pos = p.ms.pos, R = 0.38;
+    let best = null, bd = Infinity;
+    for (const n of g.map.nav.nodes) {
+      const d = Math.hypot(n.p[0] - pos[0], n.p[1] - pos[1], n.p[2] - pos[2]);
+      if (d < 0.8 || d > bd) continue;
+      if (g.world.overlaps([n.p[0] - R, n.p[1] + 0.05, n.p[2] - R], [n.p[0] + R, n.p[1] + 1.7, n.p[2] + R])) continue;
+      best = n; bd = d;
+    }
+    if (best) { p.ms.pos = [best.p[0], best.p[1] + 0.05, best.p[2]]; p.ms.vel = [0, 0, 0]; p.prevPos = [...p.ms.pos]; }
+    this.stuckTotal = 0; this.path = []; this.pi = 0;
+  }
+
   // PLANT: carrier walks to the team's target site, others escort; defenders hold a site, rush a planted charge.
   plantObjective() {
     const g = this.g, P = g.plant, p = this.p;
@@ -279,10 +293,16 @@ export class Bot {
     this.checkT += dt;
     if (this.checkT > 0.7) {
       const moved = Math.hypot(ms.pos[0] - this.checkPos[0], ms.pos[2] - this.checkPos[2]);
-      if ((fwd !== 0 || right !== 0) && moved < 0.6) { this.stuckT++; this.wantJump = true; if (this.stuckT > 2) { this.path = []; this.pi = 0; this.stuckT = 0; } }
-      else this.stuckT = 0;
+      if ((fwd !== 0 || right !== 0) && moved < 0.6) {
+        // stuck: hop and side-step, then repath, and as a last resort snap to the nearest nav node
+        this.stuckT++; this.stuckTotal = (this.stuckTotal || 0) + 1; this.wantJump = true;
+        this.unstickT = 0.45; this.unstickDir = Math.random() < 0.5 ? -1 : 1;
+        if (this.stuckT > 2) { this.path = []; this.pi = 0; this.stuckT = 0; }
+        if (this.stuckTotal >= 6 && g.isHost) this._rescue();
+      } else { this.stuckT = 0; if (moved > 1.5) this.stuckTotal = 0; }
       this.checkPos = [...ms.pos]; this.checkT = 0;
     }
+    if (this.unstickT > 0) { this.unstickT -= dt; right = this.unstickDir; fwd = -0.4; }
     // occasional bunny hop when running a long path
     if (!T && wp && ms.onGround && Math.random() < 0.004) this.wantJump = true;
 

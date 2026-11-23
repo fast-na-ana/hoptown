@@ -228,7 +228,7 @@ table.controls td:nth-child(odd) { white-space: nowrap; width: 1%; }
 #afk-banner b { background: var(--k); color: var(--y); padding: 1px 7px; border-radius: 4px; font-size: 12px; }
 
 /* streak */
-#streak { position: absolute; left: 14px; bottom: 104px; display: none; align-items: center; gap: 10px; padding: 6px 13px 6px 9px; border-radius: 10px; background: var(--y); transform: rotate(-2deg); }
+#streak { position: absolute; left: 14px; bottom: 128px; display: none; align-items: center; gap: 10px; padding: 6px 13px 6px 9px; border-radius: 10px; background: var(--y); transform: rotate(-2deg); }
 #streak small { display: block; font: 700 10px 'Space Mono', monospace; letter-spacing: 1.5px; }
 #streak b { font-size: 24px; line-height: 1; font-weight: 900; }
 .flame { width: 20px; height: 26px; background: #ff4a3d; border: 2px solid var(--k); clip-path: polygon(50% 0, 82% 35%, 100% 65%, 80% 100%, 20% 100%, 0 65%, 22% 40%, 40% 55%); }
@@ -453,3 +453,25 @@ table.controls td:nth-child(odd) { white-space: nowrap; width: 1%; }
 .tagbot.money { background: var(--k); color: var(--grn); }
 .mapbtn.na, #pause-map-seg button.na { opacity: .4; }
 .mapbtn.na::after { content: 'NO PLANT SITES'; display: block; font: 700 9px 'Space Mono', monospace; letter-spacing: 1px; margin-top: 2px; }
+
+/* armour under the health bar */
+#armour-row { display: flex; align-items: center; gap: 7px; margin-top: 7px; }
+#armour-row svg { width: 16px; height: 16px; fill: #3e8cff; stroke: var(--k); stroke-width: 2.5px; flex: 0 0 auto; }
+#armour-row b { font: 800 15px 'Archivo', sans-serif; min-width: 28px; }
+#ar-bar { flex: 1; height: 8px; border: 2px solid var(--k); border-radius: 5px; background: #fff; overflow: hidden; }
+#ar-fill { height: 100%; width: 0; background: #3e8cff; transition: width .15s; }
+#armour-row.empty svg { fill: #fff; }
+#armour-row.empty b { opacity: .45; }
+#armour-row.hit #ar-bar { animation: arhit .35s; }
+@keyframes arhit { 0% { background: #bfe0ff; transform: scaleY(1.5); } 100% { background: #fff; transform: none; } }
+#money { bottom: 128px; }
+#panel { pointer-events: auto; cursor: default; }
+.gp-item[data-i] { cursor: pointer; transition: transform .06s, box-shadow .06s; }
+.gp-item[data-i]:not(.gp-off):hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--k); background: #fff7c2; }
+.gp-item[data-i]:not(.gp-off):active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--k); }
+.gp-item.gp-off { cursor: not-allowed; }
+.gp-close { border: 2.5px solid var(--k); background: var(--k); color: var(--y); font: 800 13px 'Archivo', sans-serif; padding: 6px 14px; border-radius: 8px; cursor: pointer; box-shadow: 3px 3px 0 rgba(0,0,0,.3); }
+.gp-close:hover { background: var(--grn); color: var(--k); }
+/* carried charge shown next to the weapon slots */
+.slot.charge { background: #ff7a3d; }
+.slot.charge i { width: auto; padding: 0 3px; }

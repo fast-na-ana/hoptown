@@ -76,20 +76,16 @@
     <section class="card tabs">
       <div class="tab-bar"><button type="button" class="tab on" data-tab="controls">CONTROLS</button><button type="button" class="tab" data-tab="settings">SETTINGS</button></div>
       <div class="tab-body on" id="tab-controls">
-        <table class="controls">
-          <tr><td><kbd>WASD</kbd></td><td>move</td><td><kbd>SPACE</kbd></td><td>jump · again in air = double · hold = hop</td></tr>
-          <tr><td><kbd>SHIFT</kbd></td><td>crouch · slide when running</td><td><kbd>LMB</kbd> <kbd>RMB</kbd></td><td>fire · aim / scope</td></tr>
-          <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>rifle · sniper · pistol · knife</td><td><kbd>R</kbd></td><td>reload</td></tr>
-          <tr><td><kbd>G</kbd></td><td>frag grenade</td><td><kbd>Q</kbd></td><td>blink disc · again = warp</td></tr>
-          <tr><td><kbd>V</kbd></td><td>quick knife (one hit)</td><td><kbd>TAB</kbd> <kbd>H</kbd> <kbd>M</kbd></td><td>scores · help · big map</td></tr>
-        </table>
+        <div class="binds-head"><span class="mono">CLICK A KEY TO CHANGE IT · ESC CANCELS · BACKSPACE CLEARS</span><button type="button" class="btn ghost sm" id="binds-reset">RESET DEFAULTS</button></div>
+        <div class="binds" id="binds"></div>
+        <p class="mono hint" id="binds-warn"></p>
       </div>
       <div class="tab-body" id="tab-settings">
         <div class="field"><label class="mono" for="sens">SENSITIVITY <b id="sens-val"></b></label><input id="sens" type="range" min="0.1" max="4" step="0.05"></div>
         <div class="field"><label class="mono" for="fov">FIELD OF VIEW <b id="fov-val"></b></label><input id="fov" type="range" min="60" max="100" step="1"></div>
         <div class="field"><label class="mono" for="volume">VOLUME <b id="volume-val"></b></label><input id="volume" type="range" min="0" max="1" step="0.05"></div>
         <div class="field"><span class="mono lbl">GRAPHICS QUALITY</span><div class="seg seg3" id="quality-seg"><button type="button" data-q="low">LOW</button><button type="button" data-q="medium">MEDIUM</button><button type="button" data-q="high">HIGH</button></div></div>
-        <div class="checks"><label class="chk"><input id="invert" type="checkbox"><span>INVERT Y</span></label><label class="chk"><input id="showfps" type="checkbox"><span>SHOW FPS</span></label></div>
+        <div class="checks"><label class="chk"><input id="invert" type="checkbox"><span>INVERT Y</span></label><label class="chk"><input id="showfps" type="checkbox"><span>SHOW FPS</span></label><label class="chk" title="Goes fullscreen and keeps keys like Ctrl+W inside the game (Chrome / Edge)"><input id="kblock" type="checkbox"><span>FULLSCREEN · LOCK BROWSER SHORTCUTS</span></label></div>
       </div>
     </section>
   </div>
@@ -149,6 +145,7 @@
   <div id="vitals">
     <div class="hp-row"><span class="plus">+</span><b id="hp-num">100</b><span class="spd"><b id="speed">0.0</b> m/s</span></div>
     <div id="hp-bar"><div id="hp-fill"></div><div class="ticks"></div></div>
+    <div id="armour-row" style="display:none"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2l12 5v8c0 8-5 13-12 15C9 28 4 23 4 15V7z"/></svg><b id="ar-num">0</b><div id="ar-bar"><div id="ar-fill"></div></div></div>
   </div>
 
   <div id="abilities"></div>

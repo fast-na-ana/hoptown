@@ -4,6 +4,7 @@ import { initAudio, setVolume } from './audio.js';
 import { LocalNet, RtcNet } from './net.js';
 import { COLORS, WEAPONS, PRIMARIES, SECONDARIES, DEFAULT_LOADOUT } from './config.js';
 import { ICONS } from './hud.js';
+import { ACTIONS, RISKY, loadBinds, buildMap, keyName } from './keybinds.js';
 import { DIFFICULTIES } from './bots.js';
 import { MenuPreview } from './preview.js';
 import { MAP_LIST, PLANT_MAPS } from './maps/index.js';
@@ -174,6 +175,14 @@ const qSeg = $('quality-seg');
 const paintQ = () => qSeg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.q === settings.quality));
 qSeg.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; settings.quality = b.dataset.q; store.set('quality', settings.quality); paintQ(); applyQuality(); });
 paintQ();
+$('kblock').checked = !!store.get('kblock', false); $('kblock').onchange = () => store.set('kblock', $('kblock').checked);
+async function enterLockedFullscreen() {
+  if (!$('kblock').checked) return;
+  try {
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    if (navigator.keyboard && navigator.keyboard.lock) await navigator.keyboard.lock();
+  } catch { }
+}
 $('showfps').checked = settings.showFps; $('showfps').onchange = () => { settings.showFps = $('showfps').checked; store.set('showFps', settings.showFps); $('fps').style.display = settings.showFps ? '' : 'none'; };
 $('fps').style.display = settings.showFps ? '' : 'none';
 $('invert').checked = settings.invert; $('invert').onchange = () => { settings.invert = $('invert').checked; store.set('invert', settings.invert); };
@@ -198,12 +207,14 @@ function commonOpts() {
   store.set('name', name);
   store.set('bots', +$('bots').value);
   store.set('difficulty', DIFFICULTIES[diffIdx]);
-  return { name, color, settings, bots: +$('bots').value, difficulty: DIFFICULTIES[diffIdx], map: selMap, mode: selMode, rules: rulesFor(selMode), loadout: { ...loadout }, onLoadout: (lo) => setMenuLoadout(lo) };
+  return { name, color, settings, bots: +$('bots').value, difficulty: DIFFICULTIES[diffIdx], map: selMap, mode: selMode, rules: rulesFor(selMode), loadout: { ...loadout }, onLoadout: (lo) => setMenuLoadout(lo),
+    panelCursor: (open) => { if (!game || game.forceInput) return; game.cursorFree = open; if (open) { if (document.pointerLockElement) document.exitPointerLock(); } else lock(); } };
 }
 
 function randRoom() { return Math.random().toString(36).slice(2, 7).toUpperCase(); }
 
 async function start(mode) {
+  enterLockedFullscreen();
   initAudio(); setVolume(settings.volume);
   const opts = commonOpts();
   if (mode === 'online') {
@@ -225,6 +236,7 @@ async function start(mode) {
   $('menu').style.display = 'none';
   game.hud.show(true);
   if (opts.roomCode) game.hud.feedText(`Online room ${opts.roomCode}. Press Esc to copy the invite link`, '#ffd60a');
+  game.hud.dropKey = keyName(binds.drop[0]);
   game.onKicked = () => { leaveToMenu('You were removed from the room by the host.'); };
   game.input.lastInput = performance.now();
   lock();
@@ -232,6 +244,7 @@ async function start(mode) {
 
 function leaveToMenu(msg = '') {
   if (game) { game.dispose(); game = null; }
+  try { if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); } catch { }
   clearInterval(pauseTimer);
   if (document.pointerLockElement) document.exitPointerLock();
   $('pause').style.display = 'none'; $('hud').style.display = 'none'; $('menu').style.display = 'block';
@@ -257,11 +270,22 @@ function lock() {
   const fallback = () => { try { const r2 = canvas.requestPointerLock(); if (r2 && r2.catch) r2.catch(() => { }); } catch { } };
   try { const r = canvas.requestPointerLock({ unadjustedMovement: true }); if (r && r.catch) r.catch(fallback); } catch { fallback(); }
 }
-canvas.addEventListener('click', () => { if (game && document.pointerLockElement !== canvas && $('pause').style.display !== 'flex') lock(); });
+canvas.addEventListener('click', () => {
+  if (!game || document.pointerLockElement === canvas || $('pause').style.display === 'flex') return;
+  if (game.panelOpen) { game.setPanel(null); return; }   // click outside the buy/loadout panel closes it
+  lock();
+});
+// mouse-driven buy / loadout panel
+$('panel').addEventListener('click', (e) => {
+  if (!game) return;
+  if (e.target.closest('.gp-close')) { game.setPanel(null); return; }
+  const it = e.target.closest('.gp-item[data-i]');
+  if (it && !it.classList.contains('gp-off')) game._panelPick(+it.dataset.i);
+});
 document.addEventListener('pointerlockchange', () => {
   if (!game) return;
   if (document.pointerLockElement === canvas) { $('pause').style.display = 'none'; game.paused = false; }
-  else if (!game.forceInput) {
+  else if (!game.forceInput && !game.cursorFree) {
     game.input.keys.clear(); game.input.mouseL = false; game.input.mouseR = false;
     $('pause').style.display = 'flex';
     $('pause-bots').value = game.botCount; $('pause-bots-val').textContent = game.botCount;
@@ -332,16 +356,55 @@ document.addEventListener('mouseup', (e) => {
 });
 document.addEventListener('contextmenu', (e) => { if (game) e.preventDefault(); });
 document.addEventListener('wheel', (e) => { if (game && document.pointerLockElement === canvas) { game.input.wheelDir = Math.sign(e.deltaY); game.input.pressed.add('wheel'); } }, { passive: true });
-const gameKeys = new Set(['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyR', 'KeyC', 'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'KeyF', 'KeyB', 'KeyV', 'KeyH', 'KeyM', 'ControlLeft', 'Enter']);
-document.addEventListener('keydown', (e) => {
-  if (!game) return;
-  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
-  if (gameKeys.has(e.code)) e.preventDefault();
-  game.input.lastInput = performance.now();
-  if (!e.repeat) game.input.pressed.add(e.code);
-  game.input.keys.add(e.code);
+// ---- rebindable keys: physical key -> the logical code the game reads
+let binds = loadBinds(store.get('binds', null));
+let keyMap = buildMap(binds);
+let rebinding = null;   // { id, slot } while waiting for a key
+const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8'];
+function paintBinds() {
+  $('binds').innerHTML = ACTIONS.map(a => `<div class="bind"><span>${a.label}</span>${[0, 1].map(i => {
+    const c = binds[a.id][i], wait = rebinding && rebinding.id === a.id && rebinding.slot === i;
+    return `<button type="button" class="kb${wait ? ' wait' : ''}${c && RISKY.has(c) ? ' risky' : ''}${c ? '' : ' empty'}" data-id="${a.id}" data-slot="${i}">${wait ? 'PRESS A KEY…' : c ? keyName(c) : '+'}</button>`;
+  }).join('')}</div>`).join('') + '<div class="bind fixed"><span>Fire · aim / scope</span><button type="button" class="kb" disabled>LMB</button><button type="button" class="kb" disabled>RMB</button></div>';
+  const risky = ACTIONS.some(a => binds[a.id].some(c => RISKY.has(c)));
+  $('binds-warn').textContent = risky ? 'Ctrl / Alt / Meta keys clash with browser shortcuts (Ctrl+W closes the tab). Turn on FULLSCREEN · LOCK BROWSER SHORTCUTS in Settings to use them safely.' : '';
+}
+function setBind(id, slot, code) {
+  if (code) for (const a of ACTIONS) binds[a.id] = binds[a.id].map(c => (c === code ? null : c));   // a key does one thing
+  const cur = [...binds[id]]; cur[slot] = code; binds[id] = cur;
+  for (const a of ACTIONS) { binds[a.id] = binds[a.id].filter(Boolean); }
+  store.set('binds', binds); keyMap = buildMap(binds); paintBinds();
+}
+$('binds').addEventListener('click', (e) => {
+  const b = e.target.closest('.kb'); if (!b || b.disabled) return;
+  rebinding = { id: b.dataset.id, slot: Math.min(+b.dataset.slot, binds[b.dataset.id].length) }; paintBinds();
 });
-document.addEventListener('keyup', (e) => { if (game) game.input.keys.delete(e.code); });
+$('binds-reset').onclick = () => { binds = loadBinds(null); store.set('binds', binds); keyMap = buildMap(binds); rebinding = null; paintBinds(); };
+document.addEventListener('keydown', (e) => {
+  if (!rebinding) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if (e.code === 'Escape') { rebinding = null; paintBinds(); return; }
+  if (e.code === 'Backspace' || e.code === 'Delete') { const r = rebinding; rebinding = null; setBind(r.id, r.slot, null); return; }
+  const r = rebinding; rebinding = null; setBind(r.id, r.slot, e.code);
+}, true);
+paintBinds();
+
+const gameKeys = new Set(['Space', 'Tab', ...DIGITS, 'Enter']);
+document.addEventListener('keydown', (e) => {
+  if (!game || rebinding) return;
+  if (e.code === 'Escape' && game.panelOpen) { e.preventDefault(); game.setPanel(null); return; }
+  if (e.code === 'Escape' && document.pointerLockElement) document.exitPointerLock();
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+  const code = keyMap.get(e.code) || (game.panelOpen && DIGITS.includes(e.code) ? e.code : null);
+  if (code || gameKeys.has(e.code) || e.ctrlKey || e.metaKey) e.preventDefault();
+  if (!code) return;
+  game.input.lastInput = performance.now();
+  if (!e.repeat) game.input.pressed.add(code);
+  game.input.keys.add(code);
+});
+document.addEventListener('keyup', (e) => { if (!game) return; const code = keyMap.get(e.code); if (code) game.input.keys.delete(code); });
+// safety net: Ctrl+W etc. during a match asks before leaving
+window.addEventListener('beforeunload', (e) => { if (game && !game.forceInput) { e.preventDefault(); e.returnValue = ''; } });
 window.addEventListener('blur', () => { if (game) { game.input.keys.clear(); game.input.mouseL = false; } });
 window.addEventListener('resize', () => { if (game) game.onResize(); });
 

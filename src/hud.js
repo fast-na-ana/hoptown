@@ -67,12 +67,13 @@ export class Hud {
   }
   show(v) { this.el.style.display = v ? 'block' : 'none'; }
   // owned weapons in key order (1 primary, 2 sidearm, 3 knife)
-  setSlots(list) {
-    const key = list.join(',');
+  setSlots(list, charge = false) {
+    const key = list.join(',') + (charge ? '+c' : '');
     if (this._slots === key) return;
     this._slots = key; this.slotList = list;
     const slotKey = (w) => w === 'knife' ? 3 : ['pistol', 'hcannon'].includes(w) ? 2 : 1;
-    $('slots').innerHTML = list.map((w) => `<div class="slot" id="slot-${w}"><i>${slotKey(w)}</i>${ICONS[w]}</div>`).join('');
+    $('slots').innerHTML = list.map((w) => `<div class="slot" id="slot-${w}"><i>${slotKey(w)}</i>${ICONS[w]}</div>`).join('')
+      + (charge ? `<div class="slot charge" title="You carry the charge"><i>${this.dropKey || 'X'} DROP</i>${ICONS.charge}</div>` : '');
     for (const k in this._cache) if (k.startsWith('slot-')) delete this._cache[k];
   }
 
@@ -91,7 +92,18 @@ export class Hud {
     return true;
   }
 
-  setVitals(hp, max, speed) {
+  setVitals(hp, max, speed, armour = null) {
+    const row = $('armour-row');
+    if (armour === null) { if (row.style.display !== 'none') row.style.display = 'none'; }
+    else {
+      if (row.style.display !== 'flex') row.style.display = 'flex';
+      const a = Math.max(0, Math.round(armour));
+      if (this._lastAr !== undefined && a < this._lastAr) { row.classList.remove('hit'); void row.offsetWidth; row.classList.add('hit'); }
+      this._lastAr = a;
+      this._set('ar-num', 'text', String(a));
+      this._set('ar-fill', 'width', a + '%');
+      this._cls(row, 'empty', a <= 0);
+    }
     const h = Math.max(0, Math.ceil(hp));
     this._set('hp-num', 'text', String(h));
     this._set('hp-fill', 'width', Math.max(0, hp / max * 100) + '%');

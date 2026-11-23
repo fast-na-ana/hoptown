@@ -115,6 +115,13 @@ export class Game {
       p.weapon = w; if (p.isLocal) { this.vm.cancelReload(); this.vm.setWeapon(w); }
     } else p.pendingLoadout = next;
   }
+  // Panels take the mouse: release pointer lock while open, take it back when closed.
+  setPanel(kind) {
+    if (kind === this.panelOpen) return;
+    const was = this.panelOpen; this.panelOpen = kind;
+    if (kind && !was && this.opts.panelCursor) this.opts.panelCursor(true);
+    if (!kind && was && this.opts.panelCursor) this.opts.panelCursor(false);
+  }
   _panelPick(i) {
     const L = this.local;
     if (this.panelOpen === 'buy' && this.plant) { this.plant.buy(L, i); return; }
@@ -304,7 +311,7 @@ export class Game {
     for (const b of this.bots) { b.path = []; b.pi = 0; b.target = null; }
     if (this.plant) { this.plant.dispose(); this.plant = null; }
     if (MODES[this.mode].plant && this.map.plant) this.plant = new PlantMode(this);
-    this.panelOpen = null;
+    this.setPanel(null);
     this._initFlags();
     this.teamScore = { A: 0, B: 0 };
     this.match.killLimit = this.rules.limit; this.match.roundTime = this.rules.time;
@@ -1093,6 +1100,7 @@ export class Game {
     net.on('pl', (d, from) => { if (from === this.hostId && this.plant && !this.isHost) this.plant.onNet(d); });
     net.on('pinv', (d, from) => { if (from === this.hostId && this.plant && !this.isHost) this.plant.onEcon(d); });
     net.on('buy', (d, from) => { if (this.isHost && this.plant) this.plant.hostBuy(this.players.get(from), d.i); });
+    net.on('pdrop', (d, from) => { if (this.isHost && this.plant) this.plant.hostDrop(from); });
     net.on('pla', (d, from) => { if (this.isHost && this.plant) this.plant.hostAction(from, d.k, d.p); });
     net.on('plp', (d) => { const p = this.players.get(d.id); if (p) sfx.plantStart(this.posOf(p)); });
     net.on('restart', (d, from) => { if (from === this.hostId) this.applyMatchSettings(d.mp, d.mo, false, d.ru || null); });
@@ -1172,7 +1180,7 @@ export class Game {
     const inp = this.input;
     const L = this.local;
     const sens = (this.settings.sens || 1) * 0.0022 * (this.view.ads > 0.5 ? WEAPONS[L.weapon].adsFov * 0.85 : 1);
-    const inputActive = !this.paused && document.pointerLockElement != null || this.forceInput;
+    const inputActive = !this.paused && (document.pointerLockElement != null || this.cursorFree) || this.forceInput;
     if (inputActive && L.alive) {
       this.view.yaw -= inp.dx * sens;
       this.view.pitch -= inp.dy * sens * (this.settings.invert ? -1 : 1);
@@ -1191,14 +1199,15 @@ export class Game {
     // --- panels (B): loadout picker, or the buy menu in plant mode
     if (pressed.has('KeyB')) {
       const want = this.plant ? (this.plant.ph === 'buy' && L.team ? 'buy' : null) : 'loadout';
-      this.panelOpen = this.panelOpen ? null : want;
+      this.setPanel(this.panelOpen ? null : want);
       if (this.plant && !want) this.hud.notice('BUY MENU ONLY DURING BUY TIME');
     }
-    if (this.panelOpen === 'buy' && (!this.plant || this.plant.ph !== 'buy')) this.panelOpen = null;
+    if (this.panelOpen === 'buy' && (!this.plant || this.plant.ph !== 'buy')) this.setPanel(null);
     if (this.panelOpen) {
       for (let i = 1; i <= 8; i++) if (pressed.has('Digit' + i)) { this._panelPick(i - 1); pressed.delete('Digit' + i); }
-      if (this.panelOpen === 'loadout' && inp.clickL) this.panelOpen = null;
+
     }
+    if (pressed.has('KeyX') && this.plant && L.alive) this.plant.drop(L);
     // --- plant / defuse hold (locks movement and shooting while held)
     const holding = this.plant && L.alive ? this.plant.updateLocal(dt, keys) : false;
     const frozen = !!(this.plant && this.plant.frozen);
@@ -1293,7 +1302,7 @@ export class Game {
       mvIn.fwd = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
       mvIn.right = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
       mvIn.jump = keys.has('Space');
-      mvIn.crouch = keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyC') || keys.has('ControlLeft');
+      mvIn.crouch = keys.has('ShiftLeft');
       mvIn.yaw = this.view.yaw;
       mvIn.ads = this.view.ads > 0.5;
       mvIn.speedMul = L.weapon === 'knife' ? KNIFE.speedMul : (WEAPONS[L.weapon].speedMul || 1);
@@ -1468,7 +1477,7 @@ export class Game {
     const L = this.local, h = this.hud;
     const W = WEAPONS[L.weapon];
     const reloading = this.time < L.reloadUntil;
-    h.setVitals(L.hp, PLAYER.maxHealth, L.alive ? Math.hypot(L.ms.vel[0], L.ms.vel[2]) : 0);
+    h.setVitals(L.hp, PLAYER.maxHealth, L.alive ? Math.hypot(L.ms.vel[0], L.ms.vel[2]) : 0, this.plant ? (L.alive ? (L.armour || 0) : (L.inv ? L.inv.armour : 0)) : null);
     h.setWeapon(L.weapon, W.name, L.mag[L.weapon] ?? 0, W.mag, reloading, reloading ? 1 - (L.reloadUntil - this.time) / W.reload : 0);
     const blinkActive = !!(L.blink && !L.blink.dead);
     h.setAbilities({
@@ -1503,12 +1512,13 @@ export class Game {
       bots: this.botCount, difficulty: this.difficulty,
       modeName: MODES[this.mode].name, teams: this.teams, scoreA: this.plant ? this.plant.score.A : this.teamScore.A, scoreB: this.plant ? this.plant.score.B : this.teamScore.B, myTeam: L.team, mapName: this.map.info.name,
     });
+    if (L.alive) h.setSlots(this.ownedWeapons(L), !!(this.plant && this.plant.ch.s === 'carried' && this.plant.ch.c === L.id));
     if (this.plant) {
       const P = this.plant, alive = { A: [], B: [] };
       for (const p of this.players.values()) if (p.team && !p.afk) alive[p.team].push(p.alive);
       for (const t of ['A', 'B']) alive[t].sort((a, b) => b - a);
       h.setPlant({ ph: P.ph, t: P.t, round: P.round, score: P.score, alive, site: P.ch.site, role: L.team === P.atk ? 'ATTACK' : 'DEFEND', carrying: P.ch.s === 'carried' && P.ch.c === L.id });
-      h.setMoney(L.money ?? 0, L.inv && L.inv.armour > 0 ? `ARMOUR ${Math.round(L.alive ? L.armour : L.inv.armour)}` : '');
+      h.setMoney(L.streak >= 2 && L.alive ? null : (L.money ?? 0));
       const hold = P.hold;
       h.setAction(hold ? (hold.kind === 'plant' ? 'PLANTING…' : (L.inv && L.inv.kit ? 'DEFUSING · KIT' : 'DEFUSING…')) : null, hold ? hold.t / hold.need : 0, hold && hold.kind);
     } else { h.setPlant(null); h.setMoney(null); h.setAction(null); }
