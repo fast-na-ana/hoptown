@@ -11,3 +11,6 @@ export function buildMap(id, world, scene) {
   built.id = m.info.id; built.info = m.info;
   return built;
 }
+
+// maps that have plant sites (plant & defuse is Sunstone-only for now)
+export const PLANT_MAPS = ['sunstone'];

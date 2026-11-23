@@ -91,9 +91,31 @@ export class Bot {
     }
   }
 
+  // PLANT: carrier walks to the team's target site, others escort; defenders hold a site, rush a planted charge.
+  plantObjective() {
+    const g = this.g, P = g.plant, p = this.p;
+    if (this.round !== P.round) { this.round = P.round; this.defSite = Math.random() < 0.5 ? 'A' : 'B'; this.spot = null; }
+    const sites = g.map.plant.sites, site = (id) => sites.find(x => x.id === id);
+    const nodeNear = (c, r) => {
+      const near = g.map.nav.nodes.filter(n => Math.hypot(n.p[0] - c[0], n.p[2] - c[2]) < r && Math.abs(n.p[1] - c[1]) < 2.5);
+      return near.length ? near[Math.floor(Math.random() * near.length)].p : c;
+    };
+    const centre = (s) => [(s.min[0] + s.max[0]) / 2, s.mark[1], (s.min[2] + s.max[2]) / 2];
+    if (p.team === P.atk) {
+      if (P.ch.s === 'carried' && P.ch.c === p.id) return { pos: site(P.targetSite).mark, urgent: true };
+      if (P.ch.s === 'dropped') return { pos: P.ch.p, urgent: true };
+      if (P.ch.s === 'planted') { if (!this.spot || this.spotFor !== 'post') { this.spot = nodeNear(P.ch.p, 9); this.spotFor = 'post'; } return { pos: this.spot, urgent: false, idle: true }; }
+      return { pos: centre(site(P.targetSite)), urgent: false };
+    }
+    if (P.ch.s === 'planted' && P.ch.p) return { pos: P.ch.p, urgent: true };
+    if (!this.spot || this.spotFor !== this.defSite) { this.spot = nodeNear(centre(site(this.defSite)), 10); this.spotFor = this.defSite; }
+    return { pos: this.spot, urgent: false, idle: true };
+  }
+
   // CTF: where should this bot be heading?
   objective() {
     const g = this.g;
+    if (g.plant && this.p.team && g.map.plant) return this.plantObjective();
     if (g.mode !== 'ctf' || !g.flags || !this.p.team) return null;
     const my = this.p.team, en = other(my);
     if (g.carrying(this.p)) return { pos: g.map.flags[my], urgent: true };
@@ -186,6 +208,8 @@ export class Bot {
     }
     if (wp) { moveYaw = Math.atan2(-(wp[0] - ms.pos[0]), -(wp[2] - ms.pos[2])); fwd = 1; }
 
+    const frozen = !!(g.plant && g.plant.frozen);
+    if (frozen) { wp = null; fwd = 0; }
     let desiredYaw = wp ? moveYaw : p.yaw, desiredPitch = 0;
     if (this.alertYaw !== undefined && !this.target) { desiredYaw = this.alertYaw; if (Math.abs(angDiff(p.yaw, this.alertYaw)) < 0.1) this.alertYaw = undefined; }
 
@@ -206,15 +230,17 @@ export class Bot {
       const dist = Math.hypot(dx, dy, dz);
       if ((dist < 22 || !wp) && !(this.urgent && wp)) {
         moveYaw = Math.atan2(-dx, -dz);
-        fwd = dist > 12 ? 0.6 : dist < 5 ? -0.6 : 0;
+        fwd = p.weapon === 'shotgun' ? (dist > 6 ? 1 : 0) : dist > 12 ? 0.6 : dist < 5 ? -0.6 : 0;
         right = this.strafe * this.d.strafe;
         if (Math.random() < 0.003 * this.d.strafe && ms.onGround) this.crouchHold = 0.5; // slide
       }
       // weapon logic
-      const primary = this.role === 'sniper' && dist > 12 ? 'sniper' : 'rifle';
-      if (p.weapon !== 'pistol' && p.weapon !== primary && g.time >= p.reloadUntil) g.switchWeapon(p, primary);
-      if (p.mag[p.weapon] === 0 && p.weapon !== 'pistol' && dist < 12 && g.time < p.reloadUntil) g.switchWeapon(p, 'pistol');
-      if (p.weapon === 'pistol' && p.mag.pistol === 0) g.switchWeapon(p, primary);
+      const lo = g.loadoutOf(p), prim = lo.primary, sec = lo.secondary;
+      const want = prim && !(prim === 'sniper' && dist < 9) && !(prim === 'shotgun' && dist > 26) ? prim : sec;
+      if (p.weapon !== want && g.time >= p.reloadUntil && !(p.weapon === sec && want === prim && p.mag[prim] === 0)) g.switchWeapon(p, want);
+      if (prim && p.weapon === prim && p.mag[prim] === 0 && dist < 12 && g.time < p.reloadUntil) g.switchWeapon(p, sec);
+      if (p.weapon === sec && p.mag[sec] === 0 && prim) g.switchWeapon(p, prim);
+      if (p.weapon === 'knife') g.switchWeapon(p, want);
       const yawErr = Math.abs(angDiff(p.yaw, desiredYaw - this.err[0]));
       const pitchErr = Math.abs(p.pitch - (desiredPitch - this.err[1]));
       const cone = this.d.cone + 0.4 / Math.max(3, dist);
@@ -233,10 +259,14 @@ export class Bot {
           p.pitch += W.recoilPitch * 0.5;
         }
       }
-    } else if (p.mag[p.weapon] < WEAPONS[p.weapon].mag * 0.5) {
-      if (p.weapon === 'pistol') g.switchWeapon(p, 'rifle');
+    } else if (WEAPONS[p.weapon].mag && p.mag[p.weapon] < WEAPONS[p.weapon].mag * 0.5) {
+      const prim = g.loadoutOf(p).primary;
+      if (prim && p.weapon !== prim) g.switchWeapon(p, prim);
       g.reload(p);
     }
+    // plant / defuse: stop and hold when it's available and nobody is shooting at us
+    if (g.plant && g.isHost && g.plant.botHold(this, dt, !!T)) { fwd = 0; right = 0; this.crouchHold = 0.05; }
+    if (frozen) { fwd = 0; right = 0; }
 
     // turn toward desired angles at limited rate
     const turn = this.d.turn * dt * (T ? 1 : 0.7);

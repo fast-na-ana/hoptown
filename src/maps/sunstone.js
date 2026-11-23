@@ -253,7 +253,15 @@ export function build(world, scene) {
 
   return {
     group, padRings, spawns, teamSpawns, flags, afkSpawns, nav, bounds: { minY: -15 },
-    env: { top: '#3f86d8', mid: '#bcd8ec', bot: '#f2e2c2', fog: '#eadcbd', hemiSky: '#fff1da', hemiGround: '#b08a55', sun: '#ffe7c0', sunI: 2.7 },
+    // plant & defuse: attackers from the west base, defenders from the east, both sites on the east half
+    plant: {
+      attack: teamSpawns.A, defend: teamSpawns.B,
+      sites: [
+        { id: 'A', min: [12, -0.5, 15], max: [26, 3.5, 21], mark: [18.5, 0, 19] },
+        { id: 'B', min: [12, -0.5, -24], max: [26, 4, -16], mark: [21, 0, -18] },
+      ],
+    },
+    env: { ambient: 'sand', dust: '#e2c48c', cloud: '#fff2de', top: '#3f86d8', mid: '#bcd8ec', bot: '#f2e2c2', fog: '#eadcbd', hemiSky: '#fff1da', hemiGround: '#b08a55', sun: '#ffe7c0', sunI: 2.7 },
     preview: { radius: 56, height: 26 },
   };
 }

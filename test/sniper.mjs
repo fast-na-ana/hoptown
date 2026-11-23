@@ -12,7 +12,7 @@ const r = await p.evaluate(async () => {
   const place = () => { B.ms.pos = [-20, 0.15, -5.5]; B.hp = 100; B.protectUntil = 0; B.alive = true; L.ms.pos = [20, 0.15, -5.5]; L.ms.vel = [0,0,0]; };
   const aim = (yo) => { const e = g.eyeOf(L), t = B.ms.pos; const dx=t[0]-e[0], dy=t[1]+yo-e[1], dz=t[2]-e[2]; g.view.yaw=Math.atan2(-dx,-dz); g.view.pitch=Math.atan2(dy,Math.hypot(dx,dz)); g.view.recoil=0; g.view.recoilYaw=0; };
   const out = {};
-  place(); g.input.pressed.add('Digit2'); await wait(0.5); out.weapon = L.weapon;
+  place(); g.setLoadout(L, { primary: 'sniper', secondary: 'pistol' }); g.input.pressed.add('Digit1'); await wait(0.5); out.weapon = L.weapon;
   // scoped body shot at 40 m
   g.input.mouseR = true; await wait(0.5); out.scoped = g.scoped;
   aim(0.9); g.input.clickL = true; await wait(0.1);
@@ -39,7 +39,7 @@ await p.screenshot({path:'test/shots/scope.png'});
 await p.evaluate(async () => { const g = window.__hoptown.game; g.input.mouseR = false; g.local.hp = 14; g.local.lastHurt = g.time; g.local.ms.pos = [-14,0.15,-14]; g.view.yaw = Math.PI*0.75; g.view.pitch = 0; const t0 = g.time; while (g.time - t0 < 0.6) { g.local.lastHurt = g.time; await new Promise(r=>setTimeout(r,16)); } });
 await p.screenshot({path:'test/shots/lowhp-sniper.png'});
 // bullet holes: spray rifle at a wall
-await p.evaluate(async () => { const g = window.__hoptown.game; g.local.hp = 100; g.switchWeapon(g.local, 'rifle'); const t0 = g.time; while (g.time - t0 < 0.4) await new Promise(r=>setTimeout(r,16)); g.local.ms.pos = [-14,0.15,-14.5]; g.view.yaw = Math.PI/2; g.view.pitch = 0; g.view.recoil = 0; g.input.mouseL = true; const t1 = g.time; while (g.time - t1 < 1.6) await new Promise(r=>setTimeout(r,16)); g.input.mouseL = false; });
+await p.evaluate(async () => { const g = window.__hoptown.game; g.local.hp = 100; g.setLoadout(g.local, { primary: 'rifle', secondary: 'pistol' }); g.spawn(g.local); const t0 = g.time; while (g.time - t0 < 0.4) await new Promise(r=>setTimeout(r,16)); g.local.ms.pos = [-14,0.15,-14.5]; g.view.yaw = Math.PI/2; g.view.pitch = 0; g.view.recoil = 0; g.input.mouseL = true; const t1 = g.time; while (g.time - t1 < 1.6) await new Promise(r=>setTimeout(r,16)); g.input.mouseL = false; });
 await p.screenshot({path:'test/shots/holes.png'});
 console.log('ERR', errs);
 await b.close();

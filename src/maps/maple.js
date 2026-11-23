@@ -212,7 +212,7 @@ export function build(world, scene) {
 
   return {
     group, padRings, spawns, teamSpawns, flags, afkSpawns, nav, bounds: { minY: -15 },
-    env: { top: '#3d8bff', mid: '#9fd0ff', bot: '#e6f2ff', fog: '#cfe6ff', hemiSky: '#d9ecff', hemiGround: '#6b8f4e', sun: '#fff3dc', sunI: 2.4 },
+    env: { ambient: 'leaves', dust: '#c9bd9c', cloud: '#ffffff', top: '#3d8bff', mid: '#9fd0ff', bot: '#e6f2ff', fog: '#cfe6ff', hemiSky: '#d9ecff', hemiGround: '#6b8f4e', sun: '#fff3dc', sunI: 2.4 },
     preview: { radius: 40, height: 19 },
   };
 }

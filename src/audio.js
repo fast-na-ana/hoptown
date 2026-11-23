@@ -62,7 +62,23 @@ export const sfx = {
       tone(d, t, 0.35, 120, 30, 0.9, 'triangle');
       return;
     }
-    if (weapon === 'rifle') {
+    if (weapon === 'shotgun') {
+      noiseBurst(d, t, 0.38, 700, 0.5, 1.3);
+      noiseBurst(d, t, 0.14, 2600, 0.7, 0.6);
+      tone(d, t, 0.3, 95, 28, 1.0, 'triangle');
+      return;
+    }
+    if (weapon === 'hcannon') {
+      noiseBurst(d, t, 0.3, 1000, 0.6, 1.15);
+      noiseBurst(d, t, 0.08, 3600, 1.0, 0.45);
+      tone(d, t, 0.22, 140, 35, 0.95, 'triangle');
+      return;
+    }
+    if (weapon === 'smg') {
+      noiseBurst(d, t, 0.1, 1900, 0.8, 0.7);
+      noiseBurst(d, t, 0.06, 5000, 1.0, 0.3);
+      tone(d, t, 0.08, 220, 70, 0.5, 'triangle');
+    } else if (weapon === 'rifle') {
       noiseBurst(d, t, 0.16, 1400, 0.7, 0.9);
       noiseBurst(d, t, 0.09, 4200, 1.0, 0.35);
       tone(d, t, 0.12, 160, 45, 0.7, 'triangle');
@@ -72,10 +88,18 @@ export const sfx = {
     }
   },
   dry() { const d = spatial(null); if (!d) return; tone(d, ctx.currentTime, 0.04, 1800, 1200, 0.2, 'square'); },
-  reload(pos) {
+  reload(pos, weapon = 'rifle') {
     const d = spatial(pos, 20); if (!d) return; const t = ctx.currentTime;
-    noiseBurst(d, t, 0.05, 3000, 3, 0.4); noiseBurst(d, t + 0.35, 0.06, 2500, 3, 0.45);
+    if (weapon === 'shotgun') { noiseBurst(d, t, 0.05, 2200, 3, 0.3); return; }
+    const dur = { rifle: 1.85, smg: 1.6, sniper: 2.2, pistol: 1.15, hcannon: 1.55 }[weapon] || 1.5;
+    noiseBurst(d, t + dur * 0.18, 0.05, 3000, 3, 0.4);            // mag out
+    noiseBurst(d, t + dur * 0.62, 0.06, 2500, 3, 0.5);            // mag in
+    tone(d, t + dur * 0.64, 0.03, 700, 500, 0.12, 'square');
+    if (weapon !== 'sniper') noiseBurst(d, t + dur * 0.78, 0.05, 3400, 3, 0.4);   // charge / slide
   },
+  pump() { const d = spatial(null); if (!d) return; const t = ctx.currentTime; noiseBurst(d, t + 0.06, 0.07, 1800, 2.5, 0.45); noiseBurst(d, t + 0.3, 0.07, 2300, 2.5, 0.5); tone(d, t + 0.32, 0.04, 600, 420, 0.12, 'square'); },
+  shell() { const d = spatial(null); if (!d) return; const t = ctx.currentTime; noiseBurst(d, t, 0.04, 2800, 4, 0.35); tone(d, t, 0.03, 900, 700, 0.08, 'square'); },
+  inspect() { const d = spatial(null); if (!d) return; const t = ctx.currentTime; noiseBurst(d, t + 0.1, 0.12, 1200, 1, 0.12); noiseBurst(d, t + 1.4, 0.05, 3000, 3, 0.2); },
   hit(head) {
     const d = spatial(null); if (!d) return; const t = ctx.currentTime;
     if (head) { tone(d, t, 0.12, 1900, 1700, 0.35, 'sine'); tone(d, t, 0.1, 2850, 2600, 0.18, 'sine'); }
@@ -100,6 +124,15 @@ export const sfx = {
   swing(pos) { const d = spatial(pos, 20); if (!d) return; noiseBurst(d, ctx.currentTime, 0.16, 2600, 0.7, 0.35, 'highpass'); },
   stab(pos) { const d = spatial(pos, 25); if (!d) return; const t = ctx.currentTime; noiseBurst(d, t, 0.12, 700, 1.2, 0.6, 'lowpass'); tone(d, t, 0.1, 180, 70, 0.4, 'triangle'); },
   bolt() { const d = spatial(null); if (!d) return; const t = ctx.currentTime; noiseBurst(d, t + 0.08, 0.05, 2600, 3, 0.35); noiseBurst(d, t + 0.25, 0.06, 2000, 3, 0.4); tone(d, t + 0.3, 0.04, 900, 700, 0.12, 'square'); },
+  beep(pos, k = 1) { const d = spatial(pos, 45); if (!d) return; tone(d, ctx.currentTime, 0.07, 1900 + (1 - k) * 600, 1900 + (1 - k) * 600, 0.28, 'square'); },
+  planted() { const d = spatial(null); if (!d) return; const t = ctx.currentTime; [880, 660, 990].forEach((f, i) => tone(d, t + i * 0.12, 0.14, f, f, 0.22, 'square')); },
+  defused() { const d = spatial(null); if (!d) return; const t = ctx.currentTime; [660, 880, 1320].forEach((f, i) => tone(d, t + i * 0.1, 0.16, f, f, 0.22, 'triangle')); },
+  plantStart(pos) { const d = spatial(pos || null, 30); if (!d) return; noiseBurst(d, ctx.currentTime, 0.12, 2400, 2, 0.25); },
+  plantTick() { const d = spatial(null); if (!d) return; tone(d, ctx.currentTime, 0.04, 1500, 1500, 0.12, 'square'); },
+  bigBoom(pos) {
+    const d = spatial(pos, 160); if (!d) return; const t = ctx.currentTime;
+    noiseBurst(d, t, 1.6, 300, 0.5, 1.6, 'lowpass'); noiseBurst(d, t, 0.5, 1200, 0.6, 0.8); tone(d, t, 1.2, 70, 20, 1.2, 'triangle');
+  },
   tick() { const d = spatial(null); if (!d) return; tone(d, ctx.currentTime, 0.06, 880, 880, 0.2, 'sine'); },
   go() { const d = spatial(null); if (!d) return; tone(d, ctx.currentTime, 0.3, 1320, 1320, 0.25, 'sine'); },
 };

@@ -1,0 +1,23 @@
+import puppeteer from 'puppeteer-core';
+const W = +(process.argv[2] || 1280), H = +(process.argv[3] || 720);
+const b = await puppeteer.launch({executablePath:'/usr/bin/google-chrome',headless:'new',protocolTimeout:300000,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const p = await b.newPage(); await p.setViewport({width:W,height:H});
+await p.goto('http://localhost:8123/index.html?test&nopreview', {waitUntil:'load'});
+const r = await p.evaluate(async () => {
+  document.getElementById('bots').value = 3; window.__speed = 4;
+  document.querySelector('#mode-seg [data-m="plant"]').click();
+  await window.__start('offline');
+  const g = window.__hoptown.game; g.forceInput = true; g.helpShown = false; g.helpUntil = Infinity;
+  while (g.plant.ph !== 'buy') await new Promise(r=>setTimeout(r,50));
+  window.__speed = 1;
+  await new Promise(r=>setTimeout(r,2500));
+  const el = document.querySelector('.gp-item'); const cs = getComputedStyle(el);
+  const svg = el.querySelector('svg'); const r2 = svg.getBoundingClientRect();
+  const kids = [...el.children].map(c => { const s = getComputedStyle(c); const r = c.getBoundingClientRect(); return `${c.tagName}:${s.position}:${s.display}:${Math.round(r.width)}x${Math.round(r.height)}`; });
+  const rules = [...document.styleSheets[0].cssRules].filter(r => r.selectorText && r.selectorText.includes('gp-')).map(r => r.selectorText);
+  const pn = document.getElementById('panel'), gr = document.querySelector('.gp-grid'); const pcs = getComputedStyle(pn), gcs = getComputedStyle(gr);
+  return { panel: [pn.getBoundingClientRect().width, pcs.width, pcs.position, pcs.display], grid: [gr.getBoundingClientRect().width, gcs.display, gcs.gridTemplateColumns], item: el.getBoundingClientRect().height, svg: [r2.width, r2.height], disp: cs.display, kids, html: el.outerHTML.slice(0, 300), rules };
+});
+console.log(JSON.stringify(r));
+await p.screenshot({ path: `test/shots/buy-${W}.png` });
+await b.close();

@@ -90,6 +90,24 @@ export class Avatar {
     this.pistol = group(this.gunPivot);
     box(this.pistol, 0.05, 0.08, 0.24, dark, 0, 0, -0.26);
     box(this.pistol, 0.052, 0.02, 0.18, plate, 0, 0.045, -0.26);
+    this.sniper = group(this.gunPivot);
+    box(this.sniper, 0.07, 0.1, 0.6, dark, 0, 0, -0.2);
+    box(this.sniper, 0.03, 0.03, 0.42, dark, 0, 0.01, -0.68);
+    box(this.sniper, 0.06, 0.06, 0.26, plate, 0, 0.09, -0.16);
+    box(this.sniper, 0.05, 0.14, 0.08, dark, 0, -0.11, -0.08);
+    this.smg = group(this.gunPivot);
+    box(this.smg, 0.07, 0.1, 0.4, dark, 0, 0, -0.18);
+    box(this.smg, 0.075, 0.03, 0.16, plate, 0, 0.055, -0.18);
+    box(this.smg, 0.04, 0.16, 0.05, dark, 0, -0.12, -0.2);
+    box(this.smg, 0.03, 0.03, 0.1, dark, 0, 0.01, -0.43);
+    this.shotgun = group(this.gunPivot);
+    box(this.shotgun, 0.07, 0.1, 0.36, dark, 0, 0, -0.1);
+    box(this.shotgun, 0.035, 0.035, 0.5, dark, 0, 0.025, -0.48);
+    box(this.shotgun, 0.06, 0.05, 0.18, plate, 0, -0.035, -0.42);
+    box(this.shotgun, 0.05, 0.14, 0.07, dark, 0, -0.1, -0.02);
+    this.hcannon = group(this.gunPivot);
+    box(this.hcannon, 0.06, 0.1, 0.3, dark, 0, 0, -0.28);
+    box(this.hcannon, 0.064, 0.03, 0.22, plate, 0, 0.055, -0.28);
     this.knife = group(this.gunPivot);
     box(this.knife, 0.025, 0.04, 0.12, dark, 0.12, -0.05, -0.18);
     box(this.knife, 0.012, 0.05, 0.22, mat('#c9d1db', null, { metalness: 0.9, roughness: 0.2 }), 0.12, -0.04, -0.34);
@@ -188,10 +206,8 @@ export class Avatar {
 
     // ---- weapon + arms follow aim pitch
     if (st.weapon !== this.weapon) this.weapon = st.weapon;
-    this.rifle.visible = st.weapon === 'rifle';
-    this.pistol.visible = st.weapon === 'pistol';
+    for (const w of ['rifle', 'pistol', 'sniper', 'smg', 'shotgun', 'hcannon']) this[w].visible = st.weapon === w && !(this.meleeT > 0);
     this.knife.visible = st.weapon === 'knife' || this.meleeT > 0;
-    if (this.meleeT > 0) { this.rifle.visible = false; this.pistol.visible = false; }
     this.kick = Math.max(0, this.kick - dt * 10);
     const aim = st.pitch - P.lean; // keep the gun on the aim line, compensating torso lean
     this.gunPivot.rotation.set(aim, 0, 0);

@@ -12,10 +12,10 @@
 <canvas id="game"></canvas>
 
 <div id="menu">
-  <div class="ticker"><div class="ticker-track"><span>BUNNY HOP ✦ SLIDE ✦ DOUBLE JUMP ✦ BLINK ✦ FRAG OUT ✦ ONE-TAP KNIFE ✦ BOLT-ACTION ✦ </span><span>BUNNY HOP ✦ SLIDE ✦ DOUBLE JUMP ✦ BLINK ✦ FRAG OUT ✦ ONE-TAP KNIFE ✦ BOLT-ACTION ✦ </span></div></div>
+  <div class="ticker"><div class="ticker-track"><span>BUNNY HOP ✦ SLIDE ✦ DOUBLE JUMP ✦ BLINK ✦ FRAG OUT ✦ PUMP SHOTGUN ✦ HAND CANNON ✦ PLANT &amp; DEFUSE ✦ </span><span>BUNNY HOP ✦ SLIDE ✦ DOUBLE JUMP ✦ BLINK ✦ FRAG OUT ✦ PUMP SHOTGUN ✦ HAND CANNON ✦ PLANT &amp; DEFUSE ✦ </span></div></div>
   <div class="nb">
     <header class="nb-head">
-      <h1 class="logo">HOP<br>TOWN<span class="sticker">2 MAPS · 3 MODES</span></h1>
+      <h1 class="logo">HOP<br>TOWN<span class="sticker">2 MAPS · 4 MODES · 7 GUNS</span></h1>
       <div class="head-meta">
         <p class="mono">FAST-MOVEMENT ARENA SHOOTER<br>BROWSER BUILD 0.4 · NO DOWNLOAD</p>
         <div class="field">
@@ -26,6 +26,15 @@
           <span class="mono lbl">COLOUR</span>
           <div id="swatches"></div>
         </div>
+        <div class="field lo-field">
+          <span class="mono lbl">LOADOUT</span>
+          <button type="button" class="lo-btn" id="lo-btn" aria-haspopup="true" aria-expanded="false"><span id="lo-sum"></span><b>EDIT</b></button>
+          <div class="pop lo-pop" id="lo-pop" hidden><div class="pop-head"><span class="mono lbl">LOADOUT · FFA / TDM / CTF</span><button type="button" class="pop-x" data-close="lo-pop" aria-label="Close">✕</button></div>
+            <div class="mono lbl sub">PRIMARY</div><div class="lo-grid" id="lo-primary"></div>
+            <div class="mono lbl sub">SIDEARM</div><div class="lo-grid two" id="lo-secondary"></div>
+            <p class="mono hint">In plant mode you buy weapons instead. Change it in game with <kbd>B</kbd>.</p>
+            <button type="button" class="btn sm" data-close="lo-pop">DONE</button></div>
+        </div>
       </div>
     </header>
 
@@ -34,8 +43,8 @@
       <canvas id="preview"></canvas>
       <div class="win-foot">
         <div class="mapsel" id="map-sel"></div>
-        <div class="mode-row"><span class="mono lbl">MODE</span><div class="seg seg3" id="mode-seg"><button type="button" data-m="ffa">FFA</button><button type="button" data-m="tdm">TDM</button><button type="button" data-m="ctf">CTF</button></div></div>
-        <div class="rules" id="rules"></div>
+        <div class="mode-row"><span class="mono lbl">MODE</span><div class="seg seg4" id="mode-seg"><button type="button" data-m="ffa">FFA</button><button type="button" data-m="tdm">TDM</button><button type="button" data-m="ctf">CTF</button><button type="button" data-m="plant">PLANT</button></div><button type="button" class="gear" id="rules-btn" title="Match rules" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M10.3 2h3.4l.5 2.6 1.6.7 2.2-1.5 2.4 2.4-1.5 2.2.7 1.6 2.6.5v3.4l-2.6.5-.7 1.6 1.5 2.2-2.4 2.4-2.2-1.5-1.6.7-.5 2.6h-3.4l-.5-2.6-1.6-.7-2.2 1.5-2.4-2.4 1.5-2.2-.7-1.6L2 13.7v-3.4l2.6-.5.7-1.6-1.5-2.2 2.4-2.4 2.2 1.5 1.6-.7zM12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z"/></svg></button></div>
+        <div class="pop" id="rules-pop" hidden><div class="pop-head"><span class="mono lbl">MATCH RULES</span><button type="button" class="pop-x" data-close="rules-pop" aria-label="Close">✕</button></div><div class="rules" id="rules"></div><button type="button" class="btn sm" data-close="rules-pop">DONE</button></div>
         <p class="mono hint" id="mode-blurb"></p>
       </div>
     </section>
@@ -118,6 +127,9 @@
   </div>
 
   <div id="flagbar" style="display:none"></div>
+  <div id="plantbar" style="display:none"></div>
+  <div id="actbar" style="display:none"><span id="act-label"></span><i id="act-fill"></i></div>
+  <div id="money" style="display:none"></div>
   <div id="minimap"><canvas id="mm"></canvas><span class="mm-key">M</span></div>
   <div id="bigmap"><div class="bm-card"><div class="bm-head"><b>MAP</b><span class="mono">TEAMMATES · SPOTTED ENEMIES · DEATHS · FLAGS</span><span class="mono">M TO CLOSE</span></div><canvas id="bm"></canvas>
     <div class="bm-legend mono"><span><i class="lg you"></i>YOU</span><span><i class="lg ally"></i>TEAMMATE</span><span><i class="lg enemy"></i>SPOTTED ENEMY (1s)</span><span><i class="lg dead">✕</i>TEAMMATE DIED</span><span><i class="lg flag"></i>FLAG</span></div></div></div>
@@ -150,6 +162,7 @@
 
 
   <div id="death"><div id="death-by"></div><div id="death-timer"></div></div>
+  <div id="panel" class="gpanel" style="display:none"></div>
   <div id="scoreboard">
     <div class="sb-card">
       <h2 id="sb-title"></h2>
@@ -179,8 +192,9 @@
     <div class="pbox" id="pause-match">
       <div class="mono lbl">MATCH · MAP, MODE &amp; RULES</div>
       <div class="field"><div class="seg" id="pause-map-seg"></div></div>
-      <div class="field"><div class="seg seg3" id="pause-mode-seg"><button type="button" data-m="ffa">FFA</button><button type="button" data-m="tdm">TDM</button><button type="button" data-m="ctf">CTF</button></div></div>
-      <div class="rules" id="pause-rules"></div>
+      <div class="field mode-row"><div class="seg seg4" id="pause-mode-seg"><button type="button" data-m="ffa">FFA</button><button type="button" data-m="tdm">TDM</button><button type="button" data-m="ctf">CTF</button><button type="button" data-m="plant">PLANT</button></div><button type="button" class="gear" id="pause-rules-btn" title="Match rules" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M10.3 2h3.4l.5 2.6 1.6.7 2.2-1.5 2.4 2.4-1.5 2.2.7 1.6 2.6.5v3.4l-2.6.5-.7 1.6 1.5 2.2-2.4 2.4-2.2-1.5-1.6.7-.5 2.6h-3.4l-.5-2.6-1.6-.7-2.2 1.5-2.4-2.4 1.5-2.2-.7-1.6L2 13.7v-3.4l2.6-.5.7-1.6-1.5-2.2 2.4-2.4 2.2 1.5 1.6-.7zM12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z"/></svg></button></div>
+      <p class="mono hint" id="pause-rules-sum"></p>
+      <div class="pop" id="pause-rules-pop" hidden><div class="pop-head"><span class="mono lbl">MATCH RULES</span><button type="button" class="pop-x" data-close="pause-rules-pop" aria-label="Close">✕</button></div><div class="rules" id="pause-rules"></div><button type="button" class="btn sm" data-close="pause-rules-pop">DONE</button></div>
       <button id="apply-match" class="btn" style="margin-bottom:12px">APPLY &amp; RESTART</button>
     </div>
     <p id="bots-readonly" class="mono hint"></p>

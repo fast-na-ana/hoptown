@@ -100,6 +100,13 @@ export class Minimap {
     }
     for (const d of this.deaths) out.push({ kind: 'dead', x: d.pos[0], z: d.pos[2], color: d.team ? TEAMS[d.team].color : '#111' });
     if (g.flags) for (const t of ['A', 'B']) { const f = g.flags[t]; out.push({ kind: 'flag', x: f.pos[0], z: f.pos[2], color: TEAMS[t].color, state: f.state }); }
+    if (g.plant && g.map.plant) {
+      const P = g.plant;
+      for (const st of g.map.plant.sites) out.unshift({ kind: 'site', x: st.mark[0], z: st.mark[2], id: st.id, hot: P.ch.s === 'planted' && P.ch.site === st.id, w: st.max[0] - st.min[0], d: st.max[2] - st.min[2], cx: (st.min[0] + st.max[0]) / 2, cz: (st.min[2] + st.max[2]) / 2 });
+      const cp = P.chargePos();
+      const mine = L.team === P.atk;
+      if (cp && (P.ch.s === 'planted' || (mine && (P.ch.s === 'dropped' || (P.ch.s === 'carried' && P.ch.c !== L.id))))) out.push({ kind: 'charge', x: cp[0], z: cp[2], state: P.ch.s, t: g.time });
+    }
     return out;
   }
 
@@ -116,6 +123,16 @@ export class Minimap {
       c.rotate(-rot);
       c.strokeStyle = '#111'; c.lineWidth = 5 * s; c.beginPath(); c.moveTo(-5 * s, -5 * s); c.lineTo(5 * s, 5 * s); c.moveTo(5 * s, -5 * s); c.lineTo(-5 * s, 5 * s); c.stroke();
       c.strokeStyle = m.color; c.lineWidth = 2.5 * s; c.stroke();
+    } else if (m.kind === 'site') {
+      c.rotate(-rot);
+      c.globalAlpha = 0.9; c.fillStyle = m.hot ? '#ff3b30' : '#ffd60a';
+      c.beginPath(); c.arc(0, 0, 9 * s, 0, 6.283); c.fill(); c.stroke();
+      c.fillStyle = '#111'; c.font = `900 ${Math.round(11 * s)}px Archivo, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(m.id, 0, 0.5 * s);
+    } else if (m.kind === 'charge') {
+      c.rotate(-rot);
+      const blink = m.state === 'planted' ? (Math.floor(m.t * 4) % 2 === 0) : true;
+      c.fillStyle = blink ? (m.state === 'planted' ? '#ff3b30' : '#ffd60a') : '#5a1410';
+      c.fillRect(-5 * s, -4 * s, 10 * s, 8 * s); c.strokeRect(-5 * s, -4 * s, 10 * s, 8 * s);
     } else if (m.kind === 'flag') {
       c.rotate(-rot);
       c.fillStyle = m.color; c.fillRect(-1 * s, -9 * s, 2.5 * s, 13 * s); c.strokeRect(-1 * s, -9 * s, 2.5 * s, 13 * s);

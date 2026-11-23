@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import { Game } from './game.js';
 import { initAudio, setVolume } from './audio.js';
 import { LocalNet, RtcNet } from './net.js';
-import { COLORS } from './config.js';
+import { COLORS, WEAPONS, PRIMARIES, SECONDARIES, DEFAULT_LOADOUT } from './config.js';
+import { ICONS } from './hud.js';
 import { DIFFICULTIES } from './bots.js';
 import { MenuPreview } from './preview.js';
-import { MAP_LIST } from './maps/index.js';
-import { MODES, RULE_OPTIONS, defaultRules, resolveRules, fmtTime, fmtLimit } from './modes.js';
+import { MAP_LIST, PLANT_MAPS } from './maps/index.js';
+import { MODES, RULE_OPTIONS, defaultRules, resolveRules, fmtTime, fmtLimit, timeOptions } from './modes.js';
 import { stepMovement, makeMoveState, emptyInput } from './movement.js';
 
 const $ = (id) => document.getElementById(id);
@@ -76,6 +77,8 @@ document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () =>
 // ---- map + mode selection
 let selMap = store.get('map', 'maple'); if (!MAP_LIST.find(m => m.id === selMap)) selMap = 'maple';
 let selMode = store.get('mode', 'ffa'); if (!MODES[selMode]) selMode = 'ffa';
+const mapOk = (map, mode) => mode !== 'plant' || PLANT_MAPS.includes(map);
+if (!mapOk(selMap, selMode)) selMap = PLANT_MAPS[0];
 $('map-sel').innerHTML = MAP_LIST.map((m, i) => `<button type="button" class="mapbtn" data-map="${m.id}"><small>MAP 0${i + 1} · ${m.size}</small><b>${m.name}</b></button>`).join('');
 $('pause-map-seg').classList.add('seg2');
 $('pause-map-seg').innerHTML = MAP_LIST.map(m => `<button type="button" data-map="${m.id}">${m.name}</button>`).join('');
@@ -85,15 +88,16 @@ const savedRules = store.get('rules', {});
 const rulesFor = (mode) => resolveRules(mode, savedRules[mode]);
 let pRules = rulesFor(selMode);
 const RULE_ROWS = [
-  { k: 'time', label: 'TIME LIMIT', list: () => RULE_OPTIONS.time, fmt: (v) => fmtTime(v) },
-  { k: 'limit', label: 'SCORE LIMIT', list: (mode) => RULE_OPTIONS.limit[mode], fmt: (v, mode) => fmtLimit(mode, v) },
-  { k: 'respawn', label: 'RESPAWN', list: () => RULE_OPTIONS.respawn, fmt: (v) => `${v} SEC` },
+  { k: 'time', label: (m) => m === 'plant' ? 'ROUND TIME' : 'TIME LIMIT', list: (mode) => timeOptions(mode), fmt: (v) => fmtTime(v) },
+  { k: 'limit', label: (m) => m === 'plant' ? 'ROUNDS TO WIN' : 'SCORE LIMIT', list: (mode) => RULE_OPTIONS.limit[mode], fmt: (v, mode) => fmtLimit(mode, v) },
+  { k: 'respawn', label: () => 'RESPAWN', list: () => RULE_OPTIONS.respawn, fmt: (v) => `${v} SEC`, skip: (m) => m === 'plant' },
 ];
 function paintRules(el, mode, rules) {
   const def = defaultRules(mode);
-  el.innerHTML = RULE_ROWS.map(r => {
+  el.style.gridTemplateColumns = mode === 'plant' ? 'repeat(2, 1fr)' : '';
+  el.innerHTML = RULE_ROWS.filter(r => !(r.skip && r.skip(mode))).map(r => {
     const list = r.list(mode), i = list.indexOf(rules[r.k]);
-    return `<div class="step${rules[r.k] !== def[r.k] ? ' custom' : ''}"><small>${r.label}</small><button type="button" data-k="${r.k}" data-d="-1"${i <= 0 ? ' disabled' : ''}>−</button><b>${r.fmt(rules[r.k], mode)}</b><button type="button" data-k="${r.k}" data-d="1"${i >= list.length - 1 ? ' disabled' : ''}>+</button></div>`;
+    return `<div class="step${rules[r.k] !== def[r.k] ? ' custom' : ''}"><small>${r.label(mode)}</small><button type="button" data-k="${r.k}" data-d="-1"${i <= 0 ? ' disabled' : ''}>−</button><b>${r.fmt(rules[r.k], mode)}</b><button type="button" data-k="${r.k}" data-d="1"${i >= list.length - 1 ? ' disabled' : ''}>+</button></div>`;
   }).join('');
 }
 function stepRule(rules, mode, k, d) {
@@ -111,20 +115,39 @@ $('pause-rules').addEventListener('click', (e) => {
   stepRule(pRules, pMode, b.dataset.k, +b.dataset.d); paintSel();
 });
 function paintSel() {
-  document.querySelectorAll('#map-sel .mapbtn').forEach(b => b.classList.toggle('on', b.dataset.map === selMap));
+  document.querySelectorAll('#map-sel .mapbtn').forEach(b => { b.classList.toggle('on', b.dataset.map === selMap); b.classList.toggle('na', !mapOk(b.dataset.map, selMode)); b.title = mapOk(b.dataset.map, selMode) ? '' : 'Plant & defuse is Sunstone-only for now'; });
+  document.querySelectorAll('#pause-map-seg button').forEach(b => { b.classList.toggle('na', !mapOk(b.dataset.map, pMode)); });
   document.querySelectorAll('#mode-seg button').forEach(b => b.classList.toggle('on', b.dataset.m === selMode));
   const mi = MAP_LIST.findIndex(m => m.id === selMap);
   $('win-title').textContent = `MAP_0${mi + 1} / ${MAP_LIST[mi].name}`;
-  $('mode-blurb').textContent = `${MODES[selMode].name}: ${MODES[selMode].blurb} ${MAP_LIST[mi].blurb}`;
+  $('mode-blurb').textContent = `${MODES[selMode].name}: ${MODES[selMode].blurb} ${MAP_LIST[mi].blurb} Rules: ${rulesSummary(selMode, rulesFor(selMode))}.`;
   document.querySelectorAll('#pause-map-seg button').forEach(b => b.classList.toggle('on', b.dataset.map === pMap));
   document.querySelectorAll('#pause-mode-seg button').forEach(b => b.classList.toggle('on', b.dataset.m === pMode));
   paintRules($('rules'), selMode, rulesFor(selMode));
   paintRules($('pause-rules'), pMode, pRules);
+  $('pause-rules-sum').textContent = rulesSummary(pMode, pRules);
 }
-$('map-sel').addEventListener('click', (e) => { const b = e.target.closest('.mapbtn'); if (!b) return; selMap = b.dataset.map; store.set('map', selMap); paintSel(); preview.setMap(selMap); });
-$('mode-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; selMode = b.dataset.m; store.set('mode', selMode); paintSel(); });
-$('pause-map-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; pMap = b.dataset.map; paintSel(); });
-$('pause-mode-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; if (pMode !== b.dataset.m) { pMode = b.dataset.m; pRules = rulesFor(pMode); } paintSel(); });
+function rulesSummary(mode, r) {
+  return mode === 'plant'
+    ? `FIRST TO ${r.limit} ROUNDS · ${fmtTime(r.time)} A ROUND`
+    : `${fmtTime(r.time)} · ${fmtLimit(mode, r.limit)} · RESPAWN ${r.respawn}s`;
+}
+// small gear buttons open the rules popovers
+function wirePop(btnId, popId) {
+  const btn = $(btnId), pop = $(popId);
+  const set = (open) => { pop.hidden = !open; btn.setAttribute('aria-expanded', String(open)); };
+  btn.addEventListener('click', (e) => { e.stopPropagation(); set(pop.hidden); });
+  pop.addEventListener('click', (e) => { e.stopPropagation(); if (e.target.closest('[data-close]')) set(false); });
+  document.addEventListener('click', () => set(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden) set(false); });
+}
+wirePop('rules-btn', 'rules-pop');
+wirePop('lo-btn', 'lo-pop');
+wirePop('pause-rules-btn', 'pause-rules-pop');
+$('map-sel').addEventListener('click', (e) => { const b = e.target.closest('.mapbtn'); if (!b) return; if (!mapOk(b.dataset.map, selMode)) { selMode = 'ffa'; store.set('mode', selMode); } selMap = b.dataset.map; store.set('map', selMap); paintSel(); preview.setMap(selMap); });
+$('mode-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; selMode = b.dataset.m; store.set('mode', selMode); if (!mapOk(selMap, selMode)) { selMap = PLANT_MAPS[0]; store.set('map', selMap); preview.setMap(selMap); } paintSel(); });
+$('pause-map-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; pMap = b.dataset.map; if (!mapOk(pMap, pMode)) { pMode = 'ffa'; pRules = rulesFor(pMode); } paintSel(); });
+$('pause-mode-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; if (pMode !== b.dataset.m) { pMode = b.dataset.m; pRules = rulesFor(pMode); } if (!mapOk(pMap, pMode)) pMap = PLANT_MAPS[0]; paintSel(); });
 $('apply-match').onclick = () => {
   if (!game || !game.isHost) return;
   game.applyMatchSettings(pMap, pMode, true, { ...pRules });
@@ -155,12 +178,27 @@ $('showfps').checked = settings.showFps; $('showfps').onchange = () => { setting
 $('fps').style.display = settings.showFps ? '' : 'none';
 $('invert').checked = settings.invert; $('invert').onchange = () => { settings.invert = $('invert').checked; store.set('invert', settings.invert); };
 
+// ---- loadout (non-economy modes)
+let loadout = { ...DEFAULT_LOADOUT, ...store.get('loadout', {}) };
+if (!PRIMARIES.includes(loadout.primary)) loadout.primary = DEFAULT_LOADOUT.primary;
+if (!SECONDARIES.includes(loadout.secondary)) loadout.secondary = DEFAULT_LOADOUT.secondary;
+const WTAG = { rifle: 'ALL-ROUND', smg: 'FAST · CLOSE', shotgun: 'CLOSE · 1-PUMP', sniper: 'LONG · 1-TAP HEAD', pistol: 'QUICK', hcannon: 'HEAVY · 1-TAP HEAD' };
+function paintLoadout() {
+  const tile = (w, slot) => `<button type="button" class="lo-tile${loadout[slot] === w ? ' on' : ''}" data-w="${w}" data-slot="${slot}">${ICONS[w]}<span>${WEAPONS[w].name.toUpperCase()}</span><small>${WTAG[w]}</small></button>`;
+  $('lo-primary').innerHTML = PRIMARIES.map(w => tile(w, 'primary')).join('');
+  $('lo-secondary').innerHTML = SECONDARIES.map(w => tile(w, 'secondary')).join('');
+  $('lo-sum').textContent = `${WEAPONS[loadout.primary].name.toUpperCase()} + ${WEAPONS[loadout.secondary].name.toUpperCase()}`;
+}
+function setMenuLoadout(lo) { loadout = { ...loadout, ...lo }; store.set('loadout', loadout); paintLoadout(); }
+$('lo-pop').addEventListener('click', (e) => { const b = e.target.closest('.lo-tile'); if (!b) return; setMenuLoadout({ [b.dataset.slot]: b.dataset.w }); });
+paintLoadout();
+
 function commonOpts() {
   const name = ($('name').value || 'Player').trim().slice(0, 16) || 'Player';
   store.set('name', name);
   store.set('bots', +$('bots').value);
   store.set('difficulty', DIFFICULTIES[diffIdx]);
-  return { name, color, settings, bots: +$('bots').value, difficulty: DIFFICULTIES[diffIdx], map: selMap, mode: selMode, rules: rulesFor(selMode) };
+  return { name, color, settings, bots: +$('bots').value, difficulty: DIFFICULTIES[diffIdx], map: selMap, mode: selMode, rules: rulesFor(selMode), loadout: { ...loadout }, onLoadout: (lo) => setMenuLoadout(lo) };
 }
 
 function randRoom() { return Math.random().toString(36).slice(2, 7).toUpperCase(); }
@@ -294,7 +332,7 @@ document.addEventListener('mouseup', (e) => {
 });
 document.addEventListener('contextmenu', (e) => { if (game) e.preventDefault(); });
 document.addEventListener('wheel', (e) => { if (game && document.pointerLockElement === canvas) { game.input.wheelDir = Math.sign(e.deltaY); game.input.pressed.add('wheel'); } }, { passive: true });
-const gameKeys = new Set(['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyR', 'KeyC', 'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyV', 'KeyH', 'KeyM', 'ControlLeft', 'Enter']);
+const gameKeys = new Set(['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyR', 'KeyC', 'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'KeyF', 'KeyB', 'KeyV', 'KeyH', 'KeyM', 'ControlLeft', 'Enter']);
 document.addEventListener('keydown', (e) => {
   if (!game) return;
   if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
@@ -319,7 +357,8 @@ function frame(t) {
   const now = performance.now();
   const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now;
   if (!game) return;
-  game.update(dt);
+  const reps = window.__speed || 1;   // tests only: run the sim faster than it renders
+  for (let i = 0; i < reps; i++) game.update(dt);
   game.render();
 }
 requestAnimationFrame(frame);

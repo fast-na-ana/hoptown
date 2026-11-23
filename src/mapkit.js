@@ -34,6 +34,17 @@ const MAT_DEFS = {
   tile: { dtex: 'tile', uv: 3 }, canvasRed: { dtex: 'canvasRed', uv: 2 }, canvasBlue: { dtex: 'canvasBlue', uv: 2 },
 };
 
+// representative colour of each surface, for impact debris
+const TEX_COL = {
+  grass: '#5f9a3e', asphalt: '#3a3d42', concrete: '#b9b7b0', sidingA: '#d8d2c2', sidingB: '#c9d6e0', brick: '#a2543c',
+  wood: '#9a6b3e', fence: '#a57a4e', roof: '#5a4a44', interior: '#d9d0bf', hedge: '#3f7a34', metal: '#8a9099', crate: '#9a6b3e',
+  sand: '#d9b77e', sandstone: '#d6b07a', sandstoneDark: '#a98656', plaster: '#e6dcc8', ochre: '#c88a3c', terracotta: '#b85c38',
+  tile: '#3f8fa8', canvasRed: '#c0473a', canvasBlue: '#3a6fb0', farGrass: '#5f9a3e',
+};
+export function debrisColor(mat) { return TEX_COL[mat] || (MAT_DEFS[mat] && MAT_DEFS[mat].color) || '#9a9a9a'; }
+const SOFT = new Set(['grass', 'sand', 'hedge', 'soil', 'veg', 'farGrass', 'sandbox', 'flowers', 'cloth', 'canvasRed', 'canvasBlue']);
+export function isSoft(mat) { return SOFT.has(mat); }
+
 // ---------- geometry accumulation with world-space UVs ----------
 class GeoBucket {
   constructor() { this.pos = []; this.nor = []; this.uv = []; this.idx = []; }
@@ -125,7 +136,7 @@ export function createKit(world) {
     box(min, max, mat, collide = true) {
       const [a, b] = tf(this.rot, min, max);
       bucket(mat).addBox(a, b, (MAT_DEFS[mat] && MAT_DEFS[mat].uv) || 1);
-      if (collide) world.add(a, b);
+      if (collide) world.add(a, b).mat = mat;
     },
     collider(min, max, tag) { const [a, b] = tf(this.rot, min, max); world.add(a, b, tag); },
     visual(min, max, mat) { this.box(min, max, mat, false); },
@@ -133,7 +144,7 @@ export function createKit(world) {
     obox(c, h, yaw, mat, collide = true) {
       const cc = tp(this.rot, c);
       bucket(mat).addOBox(cc, h, yaw, (MAT_DEFS[mat] && MAT_DEFS[mat].uv) || 1);
-      if (collide) for (const [x0, x1, z0, z1] of rasterRect(cc, h[0], h[2], yaw)) world.add([x0, cc[1] - h[1], z0], [x1, cc[1] + h[1], z1], 'angled');
+      if (collide) for (const [x0, x1, z0, z1] of rasterRect(cc, h[0], h[2], yaw)) world.add([x0, cc[1] - h[1], z0], [x1, cc[1] + h[1], z1], 'angled').mat = mat;
     },
     p(p) { return tp(this.rot, p); },
   };

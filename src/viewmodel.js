@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { mergeByMaterial } from './merge.js';
+import { WEAPONS } from './config.js';
 
 // ------------------------------------------------------------------ helpers
 const mats = {};
@@ -34,6 +35,8 @@ function palette(accent) {
     dot: M('dot', '#ff3040', { emissive: '#ff2030', emissiveIntensity: 3 }),
     blade: M('blade', '#dfe6ee', { roughness: 0.22, metalness: 0.85 }),
     brass: M('brass', '#d9a441', { roughness: 0.3, metalness: 0.9 }),
+    shell: M('shellRed', '#c8372d', { roughness: 0.5, metalness: 0.1 }),
+    wood: M('gunWood', '#7a4a2a', { roughness: 0.6, metalness: 0.05 }),
   };
 }
 
@@ -193,6 +196,121 @@ function buildPistol(P) {
   };
 }
 
+// ------------------------------------------------------------------ SMG (Hornet)
+function buildSmg(P) {
+  const g = new THREE.Group();
+  box(g, 0.07, 0.078, 0.3, P.metal, 0, 0.032, -0.1);                  // receiver
+  box(g, 0.072, 0.03, 0.26, P.poly, 0, -0.022, -0.08);                // lower
+  box(g, 0.074, 0.012, 0.17, P.accent, 0, 0.075, -0.11);             // top accent
+  box(g, 0.002, 0.02, 0.045, P.dark, 0.036, 0.04, -0.07);            // ejection port
+  box(g, 0.078, 0.062, 0.16, P.poly, 0, 0.03, -0.31);                // barrel shroud
+  for (let i = 0; i < 3; i++) for (const sd of [-1, 1]) box(g, 0.004, 0.026, 0.022, P.dark, sd * 0.04, 0.03, -0.26 - i * 0.042);
+  cylZ(g, 0.012, 0.08, P.metal, 0, 0.034, -0.43);
+  cylZ(g, 0.019, 0.05, P.dark, 0, 0.034, -0.48, 8);                  // compensator
+  for (const sd of [-1, 1]) box(g, 0.006, 0.008, 0.026, P.grey, sd * 0.019, 0.034, -0.48);
+  box(g, 0.036, 0.012, 0.05, P.poly, 0, 0.082, -0.06);               // sight base
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0045, 6, 16), P.poly); ring.position.set(0, 0.108, -0.06); g.add(ring);
+  box(g, 0.034, 0.03, 0.0015, P.lens, 0, 0.108, -0.058);
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.0022, 6, 6), P.dot); dot.position.set(0, 0.108, -0.059); g.add(dot);
+  const mag = new THREE.Group(); g.add(mag);
+  box(mag, 0.034, 0.15, 0.048, P.poly, 0, -0.1, -0.13, 0.06);
+  box(mag, 0.037, 0.012, 0.052, P.accent, 0, -0.176, -0.125, 0.06);
+  box(g, 0.05, 0.03, 0.062, P.poly, 0, -0.04, -0.13);               // mag well
+  box(g, 0.042, 0.1, 0.048, P.poly, 0, -0.08, 0.025, -0.25);         // grip
+  box(g, 0.008, 0.006, 0.06, P.metal, 0, -0.05, -0.04);             // guard
+  box(g, 0.006, 0.022, 0.008, P.metal, 0, -0.04, -0.035, -0.2);
+  box(g, 0.032, 0.075, 0.034, P.poly, 0, -0.035, -0.31);            // vertical foregrip
+  for (const sd of [-1, 1]) box(g, 0.008, 0.008, 0.2, P.metal, sd * 0.021, 0.022, 0.14);  // wire stock
+  box(g, 0.052, 0.072, 0.016, P.poly, 0, 0.012, 0.245);
+  box(g, 0.054, 0.014, 0.018, P.accent, 0, 0.05, 0.245);
+  const charge = box(g, 0.022, 0.014, 0.024, P.grey, -0.044, 0.058, -0.22);   // side charging handle
+  charge.userData.keep = true;
+  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.034, -0.51); g.add(muzzle);
+  const eject = new THREE.Object3D(); eject.position.set(0.04, 0.045, -0.07); g.add(eject);
+  const right = new THREE.Group(); g.add(right);
+  box(right, 0.062, 0.075, 0.072, P.glove, 0.003, -0.085, 0.03, -0.25);
+  box(right, 0.064, 0.02, 0.056, P.glove, 0.004, -0.052, -0.01, 0.2);
+  arm(right, P, [0.01, -0.115, 0.07], [0.07, -0.22, 0.4]);
+  const left = new THREE.Group(); g.add(left);
+  box(left, 0.062, 0.07, 0.07, P.glove, -0.004, -0.05, -0.31);
+  arm(left, P, [-0.02, -0.08, -0.3], [-0.16, -0.22, -0.06]);
+  return { g, muzzle, eject, mag, charge, left, slide: null,
+    hip: new THREE.Vector3(0.13, -0.125, -0.3), ads: new THREE.Vector3(0, -0.0691, -0.22), scale: 0.64 };
+}
+
+// ------------------------------------------------------------------ pump shotgun (Breacher-8)
+function buildShotgun(P) {
+  const g = new THREE.Group();
+  box(g, 0.068, 0.086, 0.3, P.metal, 0, 0.032, -0.02);                // receiver
+  box(g, 0.07, 0.016, 0.24, P.accent, 0, -0.006, -0.02);              // accent band
+  box(g, 0.002, 0.03, 0.08, P.dark, 0.035, 0.045, -0.04);             // ejection port
+  box(g, 0.04, 0.006, 0.07, P.dark, 0, -0.012, -0.06);                // loading port
+  cylZ(g, 0.016, 0.6, P.metal, 0, 0.052, -0.46);                      // barrel
+  box(g, 0.016, 0.008, 0.58, P.dark, 0, 0.072, -0.46);                // vent rib
+  for (let i = 0; i < 10; i++) box(g, 0.018, 0.004, 0.006, P.grey, 0, 0.077, -0.2 - i * 0.055);
+  const bead = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 8, 6), P.dot); bead.position.set(0, 0.08, -0.75); g.add(bead);
+  box(g, 0.03, 0.022, 0.012, P.dark, 0, 0.088, 0.1);                 // rear notch
+  cylZ(g, 0.017, 0.48, P.poly, 0, 0.012, -0.42);                      // tube magazine
+  cylZ(g, 0.021, 0.03, P.metal, 0, 0.012, -0.67, 10);                 // cap
+  box(g, 0.046, 0.11, 0.054, P.wood, 0, -0.07, 0.11, -0.3);           // grip
+  box(g, 0.048, 0.064, 0.2, P.wood, 0, 0.0, 0.22, 0.08);              // stock
+  box(g, 0.05, 0.076, 0.02, P.dark, 0, -0.01, 0.325, 0.08);           // pad
+  box(g, 0.008, 0.006, 0.07, P.metal, 0, -0.03, 0.03);
+  box(g, 0.006, 0.022, 0.008, P.metal, 0, -0.02, 0.04, -0.2);
+  const pump = new THREE.Group(); g.add(pump);
+  box(pump, 0.068, 0.056, 0.18, P.wood, 0, 0.008, -0.4);
+  for (let i = 0; i < 5; i++) box(pump, 0.07, 0.006, 0.012, P.dark, 0, 0.008 + (i % 2 ? 0.02 : -0.02), -0.34 - i * 0.03);
+  const left = new THREE.Group(); pump.add(left);
+  box(left, 0.064, 0.06, 0.08, P.glove, -0.006, -0.03, -0.4);
+  box(left, 0.07, 0.02, 0.06, P.glove, -0.01, 0.02, -0.39, 0, 0, -0.5);
+  arm(left, P, [-0.02, -0.06, -0.38], [-0.16, -0.22, -0.1]);
+  const hshell = new THREE.Group(); left.add(hshell); hshell.position.set(0.0, -0.01, -0.4);
+  cylZ(hshell, 0.011, 0.05, P.shell, 0, 0, 0.0, 8); cylZ(hshell, 0.0115, 0.014, P.brass, 0, 0, 0.03, 8);
+  hshell.visible = false; hshell.userData.keep = true;
+  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.052, -0.78); g.add(muzzle);
+  const eject = new THREE.Object3D(); eject.position.set(0.04, 0.05, -0.04); g.add(eject);
+  const right = new THREE.Group(); g.add(right);
+  box(right, 0.062, 0.075, 0.075, P.glove, 0.002, -0.08, 0.115, -0.3);
+  arm(right, P, [0.01, -0.11, 0.15], [0.07, -0.22, 0.46]);
+  return { g, muzzle, eject, mag: null, charge: null, slide: null, left, pump, hshell, shellMat: 'shell',
+    hip: new THREE.Vector3(0.15, -0.13, -0.37), ads: new THREE.Vector3(0, -0.0512, -0.27), scale: 0.64 };
+}
+
+// ------------------------------------------------------------------ hand cannon (Hammer .50)
+function buildHcannon(P) {
+  const g = new THREE.Group();
+  const slide = new THREE.Group(); g.add(slide);
+  box(slide, 0.05, 0.058, 0.27, P.metal, 0, 0.04, -0.08);
+  box(slide, 0.034, 0.006, 0.2, P.accent, 0, 0.071, -0.1);
+  for (let i = 0; i < 3; i++) box(slide, 0.02, 0.004, 0.014, P.dark, 0, 0.072, -0.19 + i * 0.02);   // top ports
+  for (let i = 0; i < 7; i++) for (const sd of [-1, 1]) box(slide, 0.003, 0.036, 0.006, P.dark, sd * 0.026, 0.04, 0.02 + i * 0.011 - 0.03);
+  box(slide, 0.002, 0.022, 0.05, P.dark, 0.026, 0.046, -0.06);        // ejection port
+  box(slide, 0.008, 0.016, 0.01, P.dark, 0, 0.076, -0.2);              // front sight
+  const fdot = new THREE.Mesh(new THREE.SphereGeometry(0.0025, 6, 6), P.dot); fdot.position.set(0, 0.08, -0.196); slide.add(fdot);
+  box(slide, 0.009, 0.016, 0.01, P.dark, -0.013, 0.076, 0.045); box(slide, 0.009, 0.016, 0.01, P.dark, 0.013, 0.076, 0.045);
+  cylZ(g, 0.012, 0.02, P.dark, 0, 0.04, -0.222, 10);
+  box(g, 0.048, 0.036, 0.25, P.poly, 0, -0.002, -0.08);               // frame
+  box(g, 0.044, 0.01, 0.08, P.dark, 0, -0.024, -0.16);                // rail
+  box(g, 0.052, 0.14, 0.064, P.poly, 0, -0.082, 0.03, -0.22);         // grip
+  for (let i = 0; i < 5; i++) box(g, 0.054, 0.006, 0.048, P.dark, 0, -0.04 - i * 0.022, 0.03 + i * 0.005, -0.22);
+  box(g, 0.014, 0.024, 0.014, P.grey, 0, 0.05, 0.068, 0.4);          // hammer
+  const mag = new THREE.Group(); g.add(mag);
+  box(mag, 0.038, 0.12, 0.046, P.metal, 0, -0.078, 0.03, -0.22);
+  box(mag, 0.056, 0.016, 0.068, P.accent, 0, -0.15, 0.048, -0.22);
+  box(g, 0.01, 0.006, 0.06, P.poly, 0, -0.034, -0.02);
+  box(g, 0.006, 0.022, 0.008, P.metal, 0, -0.024, -0.012, -0.2);
+  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.04, -0.24); g.add(muzzle);
+  const eject = new THREE.Object3D(); eject.position.set(0.028, 0.052, -0.06); g.add(eject);
+  const right = new THREE.Group(); g.add(right);
+  box(right, 0.064, 0.085, 0.074, P.glove, 0.006, -0.08, 0.04, -0.22);
+  arm(right, P, [0.01, -0.125, 0.07], [0.06, -0.22, 0.38]);
+  const left = new THREE.Group(); g.add(left);
+  box(left, 0.054, 0.08, 0.068, P.glove, -0.034, -0.085, 0.035, -0.22, 0, 0.15);
+  arm(left, P, [-0.04, -0.125, 0.06], [-0.15, -0.23, 0.3]);
+  return { g, muzzle, eject, mag, charge: null, slide, left,
+    hip: new THREE.Vector3(0.13, -0.12, -0.31), ads: new THREE.Vector3(0, -0.0512, -0.34), scale: 0.64 };
+}
+
 // ------------------------------------------------------------------ knife
 function buildKnife(P) {
   const g = new THREE.Group();
@@ -277,7 +395,7 @@ export class ViewModel {
     const rim = new THREE.DirectionalLight('#9fd0ff', 1.0); rim.position.set(-1.5, 0.5, -1); this.scene.add(rim);
     const P = palette(accent);
     this.holder = new THREE.Group(); this.scene.add(this.holder);
-    this.models = { rifle: buildRifle(P), sniper: buildSniper(P), pistol: buildPistol(P), knife: buildKnife(P) };
+    this.models = { rifle: buildRifle(P), sniper: buildSniper(P), pistol: buildPistol(P), knife: buildKnife(P), smg: buildSmg(P), shotgun: buildShotgun(P), hcannon: buildHcannon(P) };
     for (const k in this.models) {
       const m = this.models[k];
       mergeByMaterial(m.g);
@@ -287,6 +405,8 @@ export class ViewModel {
       if (m.slide) m.slideHome = m.slide.position.clone();
       if (m.charge) m.chargeHome = m.charge.position.clone();
       if (m.bolt) m.boltHome = m.bolt.position.clone();
+      if (m.pump) m.pumpHome = m.pump.position.clone();
+      if (m.knife) m.knifeRot = m.knife.rotation.clone();
     }
     this.current = 'rifle'; this.models.rifle.g.visible = true;
     this.rig = buildThrowRig(P); this.rig.g.scale.setScalar(0.72); this.scene.add(this.rig.g);
@@ -306,7 +426,8 @@ export class ViewModel {
     this.flashT = 0;
     this.shells = [];
     const sg = new THREE.CylinderGeometry(0.0035, 0.0035, 0.016, 6); sg.rotateZ(Math.PI / 2);
-    for (let i = 0; i < 14; i++) { const m = new THREE.Mesh(sg, P.brass); m.visible = false; this.scene.add(m); this.shells.push({ m, v: new THREE.Vector3(), t: 0, spin: 0 }); }
+    this.brassMat = P.brass; this.shellRedMat = P.shell; this.flashSize = 0.16;
+    for (let i = 0; i < 20; i++) { const m = new THREE.Mesh(sg, P.brass); m.visible = false; this.scene.add(m); this.shells.push({ m, v: new THREE.Vector3(), t: 0, spin: 0 }); }
     this.shellIdx = 0;
   }
 
@@ -329,34 +450,46 @@ export class ViewModel {
       if (m.slide) m.slide.position.copy(m.slideHome);
       if (m.charge) m.charge.position.copy(m.chargeHome);
       if (m.bolt) { m.bolt.position.copy(m.boltHome); m.bolt.rotation.set(0, 0, 0); }
+      if (m.pump) m.pump.position.copy(m.pumpHome);
+      if (m.hshell) m.hshell.visible = false;
+      if (m.knife) m.knife.rotation.copy(m.knifeRot);
     }
   }
 
   _start(action, dur) { this.action = action; this.actionT = 0; this.actionDur = dur; }
 
   fire(weapon) {
-    const pistol = weapon === 'pistol', sniper = weapon === 'sniper';
+    if (this.action === 'inspect') { this.action = null; this._resetParts(); }
+    // [up kick, back kick, pitch kick, flash time]
+    const K = { pistol: [0.25, 0.9, 6, 0.045], hcannon: [0.55, 1.5, 13, 0.06], sniper: [0.4, 1.6, 9, 0.06], shotgun: [0.5, 2.0, 11, 0.07], smg: [0.08, 0.5, 1.8, 0.04], rifle: [0.12, 0.7, 2.6, 0.045] }[weapon] || [0.12, 0.7, 2.6, 0.045];
     const adsK = 1 - this.ads * 0.55;
-    this.posSpring.kick((Math.random() - 0.5) * 0.06 * adsK, (pistol ? 0.25 : sniper ? 0.4 : 0.12) * adsK, (pistol ? 0.9 : sniper ? 1.6 : 0.7) * adsK);
-    this.rotSpring.kick((pistol ? 6 : sniper ? 9 : 2.6) * adsK, (Math.random() - 0.5) * 1.2 * adsK, (Math.random() - 0.5) * 1.6 * adsK);
-    this.flashT = sniper ? 0.06 : 0.045;
-    if (pistol) this.slideKick = 0.06;
-    if (!sniper) this._ejectShell();
+    this.posSpring.kick((Math.random() - 0.5) * 0.06 * adsK, K[0] * adsK, K[1] * adsK);
+    this.rotSpring.kick(K[2] * adsK, (Math.random() - 0.5) * 1.2 * adsK, (Math.random() - 0.5) * (weapon === 'hcannon' ? 4 : 1.6) * adsK);
+    this.flashT = K[3]; this.flashSize = weapon === 'shotgun' || weapon === 'hcannon' ? 0.2 : weapon === 'smg' ? 0.12 : weapon === 'rifle' ? 0.16 : 0.11;
+    if (weapon === 'pistol' || weapon === 'hcannon') this.slideKick = 0.06;
+    if (weapon !== 'sniper' && weapon !== 'shotgun') this._ejectShell();
+  }
+  pump(dur) { if (this.current === 'shotgun') this._start('pump', dur); }
+  inspect() {
+    if (this.action || this.ads > 0.2) return;
+    this._start('inspect', this.current === 'knife' ? 1.6 : 2.3);
   }
 
-  _ejectShell() {
+  _ejectShell(red = false) {
     const m = this.models[this.current];
     if (!m.eject) return;
     const s = this.shells[this.shellIdx]; this.shellIdx = (this.shellIdx + 1) % this.shells.length;
+    s.m.material = red ? this.shellRedMat : this.brassMat;
+    s.m.scale.setScalar(red ? 2.4 : this.current === 'hcannon' ? 1.4 : 1);
     this.holder.updateMatrixWorld(true);
     m.eject.getWorldPosition(s.m.position);
     s.v.set(0.9 + Math.random() * 0.5, 0.9 + Math.random() * 0.5, 0.2 + Math.random() * 0.2);
     s.t = 0.6; s.spin = 20 + Math.random() * 15; s.m.visible = true;
   }
 
-  startReload(dur) { if (this.current !== 'knife') this._start('reload', dur); }
+  startReload(dur, shells = 0) { if (this.current !== 'knife') { this.reloadShells = shells; this._start('reload', dur); } }
   bolt(dur) { if (this.current === 'sniper') this._start('bolt', dur); }
-  cancelReload() { if (this.action === 'reload') { this.action = null; this._resetParts(); } }
+  cancelReload() { if (this.action === 'reload' || this.action === 'inspect') { this.action = null; this._resetParts(); } }
   slash() { this._start('slash', 0.42); }
   // Off-hand flick; purely visual and runs alongside whatever the gun is doing.
   throwItem(kind = 'nade') {
@@ -372,6 +505,7 @@ export class ViewModel {
     const id = this.action === 'quick' ? 'knife' : this.current;
     const m = this.models[id];
     const canAds = id !== 'knife' && this.action !== 'reload';
+    if (ads && this.action === 'inspect') { this.action = null; this._resetParts(); }
     this.ads += (((ads && canAds) ? 1 : 0) - this.ads) * Math.min(1, dt * 16);
     const A = this.ads;
     this.posSpring.update(dt); this.rotSpring.update(dt);
@@ -417,6 +551,14 @@ export class ViewModel {
         rz += up * 0.12; rx += back * 0.04; pos.y -= up * 0.012;
         if (k > 0.5 && !this._shellOut) { this._shellOut = true; this._ejectShell(); }
         if (k < 0.5) this._shellOut = false;
+      } else if (this.action === 'pump' && m.pump) {
+        const back = smooth(0.08, 0.42, k) * (1 - smooth(0.5, 0.88, k));
+        m.pump.position.z = m.pumpHome.z + back * 0.11;
+        rx += back * 0.05; rz -= back * 0.06; pos.y -= back * 0.01;
+        if (k > 0.4 && !this._shellOut) { this._shellOut = true; this._ejectShell(true); }
+        if (k < 0.4) this._shellOut = false;
+      } else if (this.action === 'inspect') {
+        this._inspectAnim(id, m, k, pos, (a, b, c) => { rx += a; ry += b; rz += c; });
       } else if (this.action === 'slash' || this.action === 'quick') {
         const wind = smooth(0, 0.18, k), swing = smooth(0.18, 0.42, k), back = smooth(0.6, 1, k);
         const s = swing - back * swing;
@@ -463,7 +605,7 @@ export class ViewModel {
       this.holder.updateMatrixWorld(true);
       m.muzzle.getWorldPosition(this.flashSprite.position);
       this.flashSprite.visible = true; this.flashSprite.material.rotation = Math.random() * 6;
-      this.flashSprite.scale.setScalar((id === 'rifle' ? 0.16 : 0.11) * (0.8 + Math.random() * 0.4));
+      this.flashSprite.scale.setScalar(this.flashSize * (0.8 + Math.random() * 0.4));
       this.flash.position.copy(this.flashSprite.position); this.flash.intensity = 5;
     } else { this.flashSprite.visible = false; this.flash.intensity = 0; this.flashT = 0; }
 
@@ -476,45 +618,102 @@ export class ViewModel {
     }
   }
 
+  // Magazine swap shared by rifle / SMG / pistols: drop, reach, insert, seat.
+  _magSwap(m, k, t0, t1, t2, dropDist, handOut) {
+    const drop = smooth(t0, t0 + 0.14, k), insert = smooth(t1, t2, k);
+    const gone = k > t0 + 0.14 && k < t1;
+    m.mag.visible = !gone;
+    if (k < t1) m.mag.position.set(m.magHome.x, m.magHome.y - drop * dropDist, m.magHome.z + drop * 0.03);
+    else m.mag.position.set(m.magHome.x, m.magHome.y - (1 - insert) * dropDist * 0.75, m.magHome.z + (1 - insert) * 0.03);
+    const reach = smooth(t0 - 0.06, t0 + 0.1, k) * (1 - smooth(t1 - 0.08, t1 + 0.06, k));
+    const guide = smooth(t1 - 0.06, t1 + 0.04, k) * (1 - smooth(t2, t2 + 0.1, k));
+    m.left.position.set(m.leftHome.x - reach * handOut[0], m.leftHome.y - reach * handOut[1] - guide * 0.05, m.leftHome.z + reach * handOut[2] + guide * 0.2);
+    return smooth(t2 - 0.02, t2 + 0.02, k) * (1 - smooth(t2 + 0.02, t2 + 0.08, k));   // seat bump
+  }
+
   _reloadAnim(id, m, k, pos, rot) {
     const tilt = smooth(0, 0.12, k) * (1 - smooth(0.86, 1, k));
-    if (id === 'rifle') {
-      pos.y -= tilt * 0.035; pos.x -= tilt * 0.02; rot(tilt * 0.12, tilt * 0.15, tilt * 0.45);
-      const out = smooth(0.1, 0.25, k), drop = smooth(0.25, 0.4, k), insert = smooth(0.45, 0.66, k);
-      m.mag.visible = !(k > 0.4 && k < 0.45);
-      if (k < 0.42) m.mag.position.set(m.magHome.x, m.magHome.y - out * 0.06 - drop * 0.4, m.magHome.z);
-      else m.mag.position.set(m.magHome.x, m.magHome.y - (1 - insert) * 0.3, m.magHome.z + (1 - insert) * 0.02);
-      const handDown = smooth(0.18, 0.32, k) * (1 - smooth(0.42, 0.62, k));
-      const toMag = smooth(0.42, 0.55, k) * (1 - smooth(0.66, 0.78, k));
-      m.left.position.set(m.leftHome.x - handDown * 0.05, m.leftHome.y - handDown * 0.35 - toMag * 0.06, m.leftHome.z + toMag * 0.25 + handDown * 0.1);
-      const seat = smooth(0.64, 0.68, k) * (1 - smooth(0.68, 0.74, k));
-      pos.y += seat * 0.012;
-      const pull = smooth(0.74, 0.8, k) * (1 - smooth(0.8, 0.86, k));
-      m.charge.position.z = m.chargeHome.z + pull * 0.07;
-      rot(pull * -0.05, 0, pull * 0.08);
+    if (id === 'rifle' || id === 'smg') {
+      const smg = id === 'smg';
+      pos.y -= tilt * 0.035; pos.x -= tilt * 0.02; rot(tilt * 0.12, tilt * 0.18, tilt * (smg ? 0.6 : 0.45));
+      const seat = this._magSwap(m, k, 0.14, 0.46, 0.64, 0.42, [0.05, 0.35, 0.12]);
+      pos.y += seat * 0.014; rot(seat * 0.04, 0, 0);
+      // charge: rifle pulls the rear handle, SMG slaps the side handle
+      const pull = smooth(0.72, 0.78, k) * (1 - smooth(0.78, 0.86, k));
+      m.charge.position.z = m.chargeHome.z + pull * (smg ? 0.06 : 0.07);
+      if (smg) m.left.position.x -= pull * 0.03;
+      rot(pull * -0.06, pull * 0.05, pull * 0.1);
     } else if (id === 'sniper') {
-      pos.y -= tilt * 0.03; rot(tilt * 0.1, tilt * 0.12, tilt * 0.4);
-      const drop = smooth(0.12, 0.3, k), insert = smooth(0.42, 0.66, k);
-      m.mag.visible = !(k > 0.3 && k < 0.42);
-      if (k < 0.36) m.mag.position.set(m.magHome.x, m.magHome.y - drop * 0.35, m.magHome.z);
-      else m.mag.position.set(m.magHome.x, m.magHome.y - (1 - insert) * 0.28, m.magHome.z);
-      const hand = smooth(0.16, 0.3, k) * (1 - smooth(0.42, 0.64, k));
-      m.left.position.set(m.leftHome.x, m.leftHome.y - hand * 0.3, m.leftHome.z + hand * 0.25);
-      const up = smooth(0.7, 0.76, k) * (1 - smooth(0.86, 0.92, k)), back = smooth(0.76, 0.8, k) * (1 - smooth(0.82, 0.86, k));
-      m.bolt.rotation.z = up * 1.15; m.bolt.position.z = m.boltHome.z + back * 0.09;
-    } else if (id === 'pistol') {
-      pos.y -= tilt * 0.02; rot(tilt * 0.2, tilt * 0.1, tilt * 0.35);
-      const drop = smooth(0.1, 0.3, k), insert = smooth(0.38, 0.7, k);
-      m.mag.visible = !(k > 0.3 && k < 0.38);
-      if (k < 0.34) m.mag.position.set(m.magHome.x, m.magHome.y - drop * 0.35, m.magHome.z + drop * 0.05);
-      else m.mag.position.set(m.magHome.x, m.magHome.y - (1 - insert) * 0.25, m.magHome.z + (1 - insert) * 0.05);
-      const hand = smooth(0.15, 0.35, k) * (1 - smooth(0.6, 0.75, k));
-      m.left.position.set(m.leftHome.x - hand * 0.04, m.leftHome.y - hand * 0.25, m.leftHome.z + hand * 0.05);
+      pos.y -= tilt * 0.03; rot(tilt * 0.1, tilt * 0.12, tilt * 0.42);
+      // bolt open first, then mag swap, then close the bolt
+      const open = smooth(0.06, 0.14, k) * (1 - smooth(0.82, 0.92, k));
+      const back = smooth(0.12, 0.2, k) * (1 - smooth(0.78, 0.84, k));
+      m.bolt.rotation.z = open * 1.15; m.bolt.position.z = m.boltHome.z + back * 0.09;
+      const seat = this._magSwap(m, k, 0.24, 0.5, 0.66, 0.35, [0, 0.3, 0.25]);
+      pos.y += seat * 0.012;
+      rot(back * 0.03, 0, open * 0.06);
+    } else if (id === 'pistol' || id === 'hcannon') {
+      const heavy = id === 'hcannon';
+      pos.y -= tilt * 0.02; rot(tilt * 0.25, tilt * 0.12, tilt * (heavy ? 0.5 : 0.35));
+      // wrist flick to drop the mag
+      const flick = smooth(0.08, 0.14, k) * (1 - smooth(0.14, 0.26, k));
+      rot(0, 0, -flick * 0.3);
+      const seat = this._magSwap(m, k, 0.12, 0.4, 0.66, 0.3, [0.04, 0.25, 0.05]);
+      pos.y += seat * 0.016; rot(seat * 0.06, 0, 0);
       const locked = smooth(0.05, 0.1, k) * (1 - smooth(0.8, 0.84, k));
-      m.slide.position.z = m.slideHome.z + locked * 0.035;
+      m.slide.position.z = m.slideHome.z + locked * (heavy ? 0.045 : 0.035);
+      if (heavy) {   // left hand racks the big slide
+        const rack = smooth(0.74, 0.8, k) * (1 - smooth(0.8, 0.88, k));
+        m.left.position.set(m.leftHome.x + rack * 0.02, m.leftHome.y + rack * 0.1, m.leftHome.z + rack * 0.06);
+        m.slide.position.z += rack * 0.02;
+      }
       const snap = smooth(0.8, 0.84, k) * (1 - smooth(0.84, 0.95, k));
-      rot(snap * -0.08, 0, 0);
+      rot(snap * -0.1, 0, 0);
+    } else if (id === 'shotgun') {
+      // tilt to show the loading port, feed shells one by one, rack at the end
+      const W = WEAPONS.shotgun, D = this.actionDur, n = Math.max(1, this.reloadShells || 1);
+      const t = k * D;
+      const hold = smooth(0, W.reloadStart, t) * (1 - smooth(D - W.reloadEnd * 0.8, D, t));
+      pos.y -= hold * 0.03; pos.x -= hold * 0.02; rot(hold * 0.2, hold * 0.25, hold * 0.65);
+      const cycT = t - W.reloadStart, i = Math.floor(cycT / W.reload);
+      if (cycT > 0 && i < n) {
+        const c = (cycT - i * W.reload) / W.reload;
+        const down = smooth(0, 0.35, c) * (1 - smooth(0.35, 0.7, c));
+        const push = smooth(0.55, 0.85, c);
+        m.hshell.visible = c > 0.25 && c < 0.88;
+        m.left.position.set(m.leftHome.x + down * 0.02, m.leftHome.y - down * 0.18 - push * 0.02, m.leftHome.z + 0.2 * smooth(0, 0.3, c) * (1 - smooth(0.9, 1, c)) + push * 0.05);
+        if (c > 0.82 && c < 0.9) pos.y += 0.006;
+      } else {
+        m.hshell.visible = false;
+        m.left.position.copy(m.leftHome);
+        if (cycT > 0 && t > D - W.reloadEnd) {   // rack
+          const r = (t - (D - W.reloadEnd)) / W.reloadEnd;
+          const back = smooth(0.1, 0.45, r) * (1 - smooth(0.5, 0.9, r));
+          m.pump.position.z = m.pumpHome.z + back * 0.11;
+        }
+      }
     }
+  }
+
+  _inspectAnim(id, m, k, pos, rot) {
+    const inn = smooth(0, 0.16, k), out = smooth(0.84, 1, k), h = inn * (1 - out);
+    if (id === 'knife') {
+      // flip the knife and catch it
+      pos.x -= h * 0.08; pos.y += h * 0.04; pos.z -= h * 0.03;
+      rot(h * 0.4, h * 0.6, -h * 0.5);
+      const spin = smooth(0.25, 0.65, k);
+      m.knife.rotation.set(m.knifeRot.x + spin * Math.PI * 2, m.knifeRot.y, m.knifeRot.z);
+      pos.y += Math.sin(spin * Math.PI) * 0.05;
+      return;
+    }
+    // bring the gun in, turn it to show the side, tilt up to admire the top, return
+    const side = smooth(0.12, 0.38, k) * (1 - smooth(0.52, 0.7, k));
+    const top = smooth(0.55, 0.72, k) * (1 - smooth(0.82, 0.98, k));
+    pos.x -= h * 0.09; pos.y += h * 0.03 + top * 0.02; pos.z += h * 0.04;
+    rot(h * 0.05 + top * 0.55, h * 0.45 + side * 0.55, -h * 0.2 - side * 0.35 + top * 0.2);
+    if (m.slide) m.slide.position.z = m.slideHome.z + smooth(0.6, 0.66, k) * (1 - smooth(0.7, 0.76, k)) * 0.03;
+    if (m.charge && id !== 'smg') m.charge.position.z = m.chargeHome.z + smooth(0.6, 0.66, k) * (1 - smooth(0.68, 0.74, k)) * 0.05;
+    if (m.pump) m.pump.position.z = m.pumpHome.z + smooth(0.6, 0.66, k) * (1 - smooth(0.68, 0.76, k)) * 0.06;
   }
 
   setAspect(a) { this.camera.aspect = a; this.camera.updateProjectionMatrix(); }

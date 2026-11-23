@@ -6,9 +6,13 @@ export const ICONS = {
   rifle: '<svg viewBox="0 0 64 24"><path d="M2 9h34l3-3h10v3h13v4H49l-2 2H35l-3 7h-6l2-7h-6l-3 5h-6l2-5H2z"/></svg>',
   pistol: '<svg viewBox="0 0 40 28"><path d="M3 4h32v7H17l-3 13H6l3-13H3z"/></svg>',
   sniper: '<svg viewBox="0 0 80 22"><path d="M1 9h6l2-2h26V4h18v3h6v2h20v3H58l-3 2H40l-3 6h-5l1-6h-8l-4 5h-6l3-5H9L7 13H1z"/></svg>',
+  smg: '<svg viewBox="0 0 56 26"><path d="M2 8h8V5h6v3h20l2-2h8v3h8v4h-8l-2 2h-6l-1 10h-6l1-10h-4l-3 6h-6l2-6H16v2h-4v-2H2z"/></svg>',
+  shotgun: '<svg viewBox="0 0 84 20"><path d="M1 6h50v-2h30v4H51v2h22v4H51l-2 1H34l-3 5h-6l2-5H19l-4 3H3l2-4H1z"/></svg>',
+  hcannon: '<svg viewBox="0 0 44 30"><path d="M2 3h38v9H22l-3 15h-9l3-15H8v2H5v-2H2z"/></svg>',
   knife: '<svg viewBox="0 0 48 20"><path d="M2 8h14v5H2zM16 6h3v9h-3zM19 8h18c5 0 9 2 9 2s-5 3-12 3H19z"/></svg>',
   grenade: '<svg viewBox="0 0 32 32"><circle cx="15" cy="19" r="10"/><path d="M12 6h8v5h-8zM20 7l6-3 1 2-6 3z"/></svg>',
   blink: '<svg viewBox="0 0 32 32"><ellipse cx="16" cy="16" rx="13" ry="5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="16" r="3.5"/><path d="M16 1l4 6h-8zM16 31l-4-6h8z"/></svg>',
+  charge: '<svg viewBox="0 0 32 24"><path d="M3 6h26v14H3zM8 2h6v4H8zM20 9h6v4h-6z"/></svg>',
   grenadeFeed: '✹', fall: '↓',
 };
 
@@ -59,10 +63,18 @@ export class Hud {
       return c.toDataURL();
     };
     $('lowhp').innerHTML = '<div class="tint"></div>' + ['tl', 'tr', 'bl', 'br', 'l', 'r'].map(pos => `<div class="splat ${pos}" style="background-image:url(${splat()})"></div>`).join('');
-    $('slots').innerHTML = [['rifle', '1'], ['sniper', '2'], ['pistol', '3'], ['knife', '4']].map(([w, k]) =>
-      `<div class="slot" id="slot-${w}"><i>${k}</i>${ICONS[w]}</div>`).join('');
+    this.setSlots(['rifle', 'pistol', 'knife']);
   }
   show(v) { this.el.style.display = v ? 'block' : 'none'; }
+  // owned weapons in key order (1 primary, 2 sidearm, 3 knife)
+  setSlots(list) {
+    const key = list.join(',');
+    if (this._slots === key) return;
+    this._slots = key; this.slotList = list;
+    const slotKey = (w) => w === 'knife' ? 3 : ['pistol', 'hcannon'].includes(w) ? 2 : 1;
+    $('slots').innerHTML = list.map((w) => `<div class="slot" id="slot-${w}"><i>${slotKey(w)}</i>${ICONS[w]}</div>`).join('');
+    for (const k in this._cache) if (k.startsWith('slot-')) delete this._cache[k];
+  }
 
   _cls(el, cls, on) {
     const key = (el.id || el) + '.' + cls;
@@ -92,16 +104,16 @@ export class Hud {
     if (id === 'knife') this._set('ammo', 'html', '<span class="inf">MELEE</span>');
     else if (reloading) this._set('ammo', 'html', `<span class="reload">RELOADING<i style="width:${Math.round(reloadPct * 100)}%"></i></span>`);
     else this._set('ammo', 'html', `<b class="${mag <= Math.ceil(magMax * 0.25) ? 'low' : ''}">${mag}</b><span class="max">/ ${magMax}</span>`);
-    for (const w of ['rifle', 'sniper', 'pistol', 'knife']) this._cls($('slot-' + w), 'on', w === id);
+    for (const w of this.slotList || []) { const el = $('slot-' + w); if (el) this._cls(el, 'on', w === id); }
   }
 
   setAbilities(a) {
     // grenades
     const n = $('ab-nade');
     this._cls(n, 'ready', a.nades > 0); this._cls(n, 'empty', a.nades === 0);
-    this._set('ab-nade', '--p', (a.nades < a.nadeMax ? Math.round(a.nadePct * 100) : 0) + '%');
+    this._set('ab-nade', '--p', (a.nades < a.nadeMax && !a.bought ? Math.round(a.nadePct * 100) : 0) + '%');
     this._set('ab-nade-pips', 'html', Array.from({ length: a.nadeMax }, (_, i) => `<i class="${i < a.nades ? 'on' : ''}"></i>`).join(''));
-    this._set('ab-nade-sub', 'text', a.nades > 0 ? `${a.nades} ready` : `recharging ${Math.ceil(a.nadeLeft)}s`);
+    this._set('ab-nade-sub', 'text', a.nades > 0 ? `${a.nades} ready` : a.bought ? 'buy in the shop' : `recharging ${Math.ceil(a.nadeLeft)}s`);
     // blink
     const b = $('ab-blink');
     this._cls(b, 'ready', a.blink === 'ready'); this._cls(b, 'active', a.blink === 'active'); this._cls(b, 'empty', a.blink === 'cooldown');
@@ -171,6 +183,33 @@ export class Hud {
     this._set('flagbar', 'html', chip('A', 'EMBER FLAG') + chip('B', 'TIDE FLAG'));
   }
 
+  // plant & defuse bar: alive pips per team, round clock or charge state, your role
+  setPlant(st) {
+    const el = $('plantbar');
+    if (!st) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    const pips = (t) => st.alive[t].map(a => `<span class="pip${a ? '' : ' dead'}"></span>`).join('');
+    const m = Math.max(0, Math.floor(st.t / 60)), sec = Math.max(0, Math.floor(st.t % 60));
+    const clock = `${m}:${String(sec).padStart(2, '0')}`;
+    const mid = st.ph === 'planted' ? `<div class="pb-mid planted"><big>${clock}</big><small>CHARGE · SITE ${st.site}</small></div>`
+      : `<div class="pb-mid"><big>${st.ph === 'post' ? '--:--' : clock}</big><small>${st.ph === 'buy' ? 'BUY TIME' : st.ph === 'post' ? 'ROUND OVER' : 'ROUND ' + st.round}</small></div>`;
+    this._set('plantbar', 'html', `<div class="pb-team A">${pips('A')}<b>${st.score.A}</b></div>${mid}<div class="pb-team B"><b>${st.score.B}</b>${pips('B')}</div><div class="pb-role ${st.role === 'ATTACK' ? 'atk' : 'def'}">${st.role}${st.carrying ? ' · CHARGE' : ''}</div>`);
+  }
+  setMoney(v, sub = '') {
+    const el = $('money');
+    if (v === null) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    this._set('money', 'html', `$${v}${sub ? `<small>${esc(sub)}</small>` : ''}`);
+  }
+  setAction(label, pct, kind) {
+    const el = $('actbar');
+    if (label === null) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    this._cls(el, 'defuse', kind === 'defuse');
+    this._set('act-label', 'text', label);
+    this._set('act-fill', 'width', Math.round(pct * 100) + '%');
+  }
+
   setStreak(n) {
     const el = $('streak');
     el.style.display = n >= 2 ? 'flex' : 'none';
@@ -226,7 +265,7 @@ export class Hud {
     if (killerName === null) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
     el.style.display = 'flex';
     this._set('death-by', 'html', killerName ? `ELIMINATED BY <b style="color:${color}">${esc(killerName)}</b>` : 'YOU DIED');
-    this._set('death-timer', 'text', respawnIn > 0 ? `Respawning in ${respawnIn.toFixed(1)}s` : 'Respawning…');
+    this._set('death-timer', 'text', typeof respawnIn === 'string' ? respawnIn : respawnIn > 0 ? `Respawning in ${respawnIn.toFixed(1)}s · B to change loadout` : 'Respawning…');
   }
   center(text) {
     const el = $('centerbig');
@@ -234,6 +273,12 @@ export class Hud {
     el.style.display = text ? 'block' : 'none';
   }
   help(show) { this._cls($('help'), 'show', show); }
+  panel(html) {
+    const el = $('panel');
+    if (html === null) { if (el.style.display !== 'none') el.style.display = 'none'; this._panel = null; return; }
+    if (el.style.display !== 'block') el.style.display = 'block';
+    if (this._panel !== html) { el.innerHTML = html; this._panel = html; }
+  }
   setAfk(on) { this._cls($('afk-banner'), 'on', on); this._cls($('abilities'), 'off', on); this._cls($('weapon'), 'off', on); }
   scoreboard(show, rows, title = 'SCOREBOARD', footer = '') {
     const el = $('scoreboard');
@@ -245,7 +290,7 @@ export class Hud {
     this._set('sb-body', 'html', rows.map((r) => r.header
       ? `<tr class="team-h"><td colspan="8"><span class="dot" style="background:${r.color}"></span>${esc(r.label)}${r.mine ? ' <i class="tagbot host">YOUR TEAM</i>' : ''}<b>${r.score}</b></td></tr>`
       : `<tr class="${r.me ? 'me' : ''}">
-      <td class="rk">${++rank}</td><td><span class="dot" style="background:${r.color}"></span>${esc(r.name)}${r.bot ? ' <i class="tagbot">BOT</i>' : ''}${r.host ? ' <i class="tagbot host">HOST</i>' : ''}${r.afk ? ' <i class="tagbot afk">AFK</i>' : ''}</td>
+      <td class="rk">${++rank}</td><td><span class="dot" style="background:${r.color}"></span>${esc(r.name)}${r.bot ? ' <i class="tagbot">BOT</i>' : ''}${r.host ? ' <i class="tagbot host">HOST</i>' : ''}${r.afk ? ' <i class="tagbot afk">AFK</i>' : ''}${r.money !== undefined ? ` <i class="tagbot money">$${r.money}</i>` : ''}</td>
       <td>${r.score}</td><td>${r.kills}</td><td>${r.deaths}</td><td>${r.best}</td><td>${r.wins}</td><td class="ping">${r.ping ?? ''}</td></tr>`).join(''));
   }
   update(dt) {
