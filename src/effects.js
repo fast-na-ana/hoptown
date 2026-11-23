@@ -28,6 +28,18 @@ export class Effects {
     this.flashMat = new THREE.SpriteMaterial({ map: this.flashTex, color: '#ffd98a', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
     this.boomMat = new THREE.MeshBasicMaterial({ color: '#ffb04a', transparent: true, opacity: 0.9, depthWrite: false });
     this.ringMat = new THREE.MeshBasicMaterial({ color: '#7ff8ff', transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide });
+    // bullet-hole decals (pooled)
+    const hc = document.createElement('canvas'); hc.width = hc.height = 64;
+    const hg = hc.getContext('2d');
+    const rg = hg.createRadialGradient(32, 32, 2, 32, 32, 30);
+    rg.addColorStop(0, 'rgba(10,10,12,1)'); rg.addColorStop(0.22, 'rgba(18,16,16,0.95)'); rg.addColorStop(0.32, 'rgba(60,55,50,0.7)');
+    rg.addColorStop(0.55, 'rgba(40,36,32,0.25)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+    hg.fillStyle = rg; hg.fillRect(0, 0, 64, 64);
+    hg.strokeStyle = 'rgba(15,12,10,0.6)'; hg.lineWidth = 1.2;
+    for (let i = 0; i < 7; i++) { const a = Math.random() * 6.28, r0 = 7, r1 = 12 + Math.random() * 10; hg.beginPath(); hg.moveTo(32 + Math.cos(a) * r0, 32 + Math.sin(a) * r0); hg.lineTo(32 + Math.cos(a + 0.2) * r1, 32 + Math.sin(a + 0.2) * r1); hg.stroke(); }
+    this.holeMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hc), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
+    this.holeGeo = new THREE.PlaneGeometry(0.13, 0.13);
+    this.holes = []; this.holeNext = 0; this.maxHoles = 160;
     this.light = new THREE.PointLight('#ffb050', 0, 14, 2);
     scene.add(this.light);
     this.lightTime = 0;
@@ -73,6 +85,20 @@ export class Effects {
     this.scene.add(s);
     this.items.push({ obj: s, life: 0.05, max: 0.05, kind: 'sprite' });
   }
+
+  hole(p, normal, size = 1) {
+    if (!normal || (normal[0] === 0 && normal[1] === 0 && normal[2] === 0)) return;
+    let m = this.holes[this.holeNext];
+    if (!m) { m = new THREE.Mesh(this.holeGeo, this.holeMat); m.renderOrder = 1; this.scene.add(m); this.holes[this.holeNext] = m; }
+    this.holeNext = (this.holeNext + 1) % this.maxHoles;
+    m.position.set(p[0] + normal[0] * 0.006, p[1] + normal[1] * 0.006, p[2] + normal[2] * 0.006);
+    m.lookAt(p[0] + normal[0], p[1] + normal[1], p[2] + normal[2]);
+    m.rotateZ(Math.random() * Math.PI * 2);
+    m.scale.setScalar(size * (0.85 + Math.random() * 0.3));
+    m.visible = true;
+  }
+
+  clearHoles() { for (const m of this.holes) if (m) m.visible = false; }
 
   impact(p, normal, color = '#d8d0c0') {
     this.burst(p, 6, color, 2.5, 0.35, normal);

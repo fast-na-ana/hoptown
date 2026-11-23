@@ -1,0 +1,12 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({executablePath:'/usr/bin/google-chrome',headless:'new',args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const p = await b.newPage(); await p.setViewport({width:1366,height:820});
+p.on('pageerror', e => console.log('pageerror', e.message));
+await p.goto('http://localhost:8123/index.html?test&nopreview', {waitUntil:'load'});
+await p.evaluate(() => window.__start('offline'));
+await new Promise(r=>setTimeout(r,1500));
+await p.evaluate(() => document.exitPointerLock());
+await new Promise(r=>setTimeout(r,800));
+console.log(await p.evaluate(() => document.getElementById('pause').style.display));
+await p.screenshot({path:'test/shots/pause-new.png'});
+await b.close();

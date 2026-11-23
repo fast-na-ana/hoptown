@@ -10,6 +10,7 @@ export const PLAYER = {
   eye: 1.62,
   crouchEye: 1.0,
   stepHeight: 0.5,
+  mantleHeight: 0.9,
   maxHealth: 100,
   regenDelay: 4.0,       // seconds after last damage before regen
   regenRate: 25,         // hp per second
@@ -45,29 +46,36 @@ export const WEAPONS = {
   rifle: {
     id: 'rifle', name: 'VX-9 Rifle', slot: 1, auto: true,
     interval: 0.092, damage: 22, headMul: 1.65, falloffStart: 28, falloffEnd: 55, minDamage: 15,
-    mag: 30, reload: 1.85, spreadHip: 0.018, spreadAds: 0.0035, bloomPerShot: 0.0028, bloomMax: 0.022,
+    mag: 30, reload: 1.85, spreadHip: 0.016, spreadAds: 0.003, bloomPerShot: 0.0016, bloomMax: 0.014,
     recoilPitch: 0.0042, recoilYaw: 0.0016, adsFov: 0.72, moveSpread: 0.025, airSpread: 0.05,
+    pattern: true, sprayReset: 0.32,
+  },
+  sniper: {
+    id: 'sniper', name: 'LR-7 Longbolt', slot: 2, auto: false, bolt: true, scope: true,
+    interval: 0.55, damage: 80, headMul: 2.5, falloffStart: 999, falloffEnd: 1000, minDamage: 80,
+    mag: 5, reload: 2.2, spreadHip: 0.085, spreadAds: 0.0004, bloomPerShot: 0, bloomMax: 0,
+    recoilPitch: 0.03, recoilYaw: 0.004, adsFov: 0.27, moveSpread: 0.022, airSpread: 0.09, speedMul: 0.93,
   },
   pistol: {
-    id: 'pistol', name: 'K-12 Sidearm', slot: 2, auto: false,
+    id: 'pistol', name: 'K-12 Sidearm', slot: 3, auto: false,
     interval: 0.15, damage: 31, headMul: 1.8, falloffStart: 18, falloffEnd: 40, minDamage: 20,
     mag: 12, reload: 1.15, spreadHip: 0.011, spreadAds: 0.003, bloomPerShot: 0.006, bloomMax: 0.025,
     recoilPitch: 0.009, recoilYaw: 0.0022, adsFov: 0.85, moveSpread: 0.012, airSpread: 0.03,
   },
   knife: {
-    id: 'knife', name: 'Arc Knife', slot: 3, melee: true, auto: false, interval: 0.5, mag: 0, reload: 0,
+    id: 'knife', name: 'Arc Knife', slot: 4, melee: true, auto: false, interval: 0.5, mag: 0, reload: 0,
     spreadHip: 0, spreadAds: 0, bloomPerShot: 0, bloomMax: 0, recoilPitch: 0, recoilYaw: 0, adsFov: 1, moveSpread: 0, airSpread: 0,
   },
 };
 
 export const KNIFE = {
-  id: 'knife', name: 'Arc Knife', slot: 3,
+  id: 'knife', name: 'Arc Knife', slot: 4,
   range: 2.3, damage: 200, cooldown: 0.5, hitDelay: 0.07, cone: 0.55, speedMul: 1.08,
 };
 
 export const GRENADE = {
-  max: 2, rechargeTime: 14, fuse: 1.8, throwSpeed: 17, upBoost: 4, radius: 6.5,
-  maxDamage: 115, selfDamageMul: 0.5, restitution: 0.42, gravity: 19,
+  max: 2, rechargeTime: 11, fuse: 1.5, throwSpeed: 19, upBoost: 4, radius: 8.5,
+  maxDamage: 175, minFrac: 0.45, selfDamageMul: 0.5, restitution: 0.38, gravity: 19,
 };
 
 export const BLINK = {

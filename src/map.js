@@ -3,6 +3,11 @@
 import * as THREE from 'three';
 import { makeTextures } from './textures.js';
 
+const RANK = {
+  grass: 0, asphalt: 1, concrete: 2, wood: 2, roof: 2, interior: 3, fence: 3, hedge: 3, trunk: 3, metal: 3,
+  truckRed: 3, carBlue: 3, carYellow: 3, crate: 3, sidingA: 4, sidingB: 4, brick: 4, dark: 5, white: 5,
+  trim: 6, orange: 6, lamp: 6, pad: 6, glass: 7,
+};
 const F1 = 0.15;   // ground floor top
 const F2 = 3.35;   // second floor top
 const ROOF = 6.5;  // roof top
@@ -136,20 +141,20 @@ export function buildMap(world, scene) {
     B.rot = rot;
     // House footprint x[-19,-7], z[-20,-11]; front faces +z (street)
     const X0 = -19, X1 = -7, Z0 = -20, Z1 = -11, W = 0.3;
-    B.box([X0, 0, Z0], [X1, F1, Z1], 'wood');                       // ground slab
+    B.box([X0 + W, 0, Z0 + W], [X1 - W, F1, Z1 - W], 'wood');       // ground slab (inside the walls)
     const dW = 1.4;
     // front wall
-    wall('x', Z1 - W, Z1, X0, X1, 0, ROOF, [
-      [-14.2, -12.8, F1, 2.45], [-18, -16.2, 1.1, 2.3], [-10.4, -8.4, 1.1, 2.3],
-      [-17.6, -15.6, 4.3, 5.5], [-14, -12, 4.3, 5.5], [-10.4, -8.4, 4.3, 5.5],
+    wall('x', Z1 - W, Z1, X0, X1, 0, ROOF - 0.2, [
+      [-14.2, -12.8, F1, 2.45], [-18.2, -16.0, 0.95, 2.85], [-10.6, -8.2, 0.95, 2.85],
+      [-17.6, -15.6, 4.25, 5.9], [-14, -12, 4.25, 5.9], [-10.4, -8.4, 4.25, 5.9],
     ], siding);
     // back wall
-    wall('x', Z0, Z0 + W, X0, X1, 0, ROOF, [
-      [-10, -10 + dW, F1, 2.45], [-17, -15, 1.1, 2.3], [-17, -15, 4.3, 5.5], [-11, -9, 4.3, 5.5],
+    wall('x', Z0, Z0 + W, X0, X1, 0, ROOF - 0.2, [
+      [-10, -10 + dW, F1, 2.45], [-17.2, -14.8, 0.95, 2.85], [-17, -15, 4.25, 5.9], [-11, -9, 4.25, 5.9],
     ], siding);
     // side walls
-    wall('z', X0, X0 + W, Z0 + W, Z1 - W, 0, ROOF, [[-16.5, -14.5, 1.1, 2.3], [-17, -15, 4.3, 5.5]], siding);
-    wall('z', X1 - W, X1, Z0 + W, Z1 - W, 0, ROOF, [[-14.2, -12.8, F1, 2.45], [-18.6, -16.2, 4.3, 5.5]], siding);
+    wall('z', X0, X0 + W, Z0 + W, Z1 - W, 0, ROOF - 0.2, [[-16.7, -14.3, 0.95, 2.85], [-17, -15, 4.25, 5.9]], siding);
+    wall('z', X1 - W, X1, Z0 + W, Z1 - W, 0, ROOF - 0.2, [[-14.2, -12.8, F1, 2.45], [-18.6, -16.2, 4.25, 5.9]], siding);
     // second floor slab with stairwell hole x[-18.7,-13.4] z[-19.7,-18.2]
     B.box([-13.4, F2 - 0.2, Z0 + W], [X1 - W, F2, Z1 - W], 'wood');
     B.box([X0 + W, F2 - 0.2, -18.2], [-13.4, F2, Z1 - W], 'wood');
@@ -189,10 +194,10 @@ export function buildMap(world, scene) {
     world.pads.push({ min: pm, max: px, vel: v });
 
     // Garage x[-4,3] z[-21,-13], open door toward street
-    wall('x', -13.3, -13.0, -4, 3, 0, 3.4, [[-3.2, 2.2, 0, 2.8]], 'brick');
-    wall('x', -21, -20.7, -4, 3, 0, 3.4, [[-1.2, 0.2, 0, 2.3]], 'brick');
-    wall('z', -4, -3.7, -20.7, -13.3, 0, 3.4, [[-18.5, -16, 1.1, 2.2]], 'brick');
-    wall('z', 2.7, 3, -20.7, -13.3, 0, 3.4, [], 'brick');
+    wall('x', -13.3, -13.0, -4, 3, 0, 3.2, [[-3.2, 2.2, 0, 2.8]], 'brick');
+    wall('x', -21, -20.7, -4, 3, 0, 3.2, [[-1.2, 0.2, 0, 2.3]], 'brick');
+    wall('z', -4, -3.7, -20.7, -13.3, 0, 3.2, [[-18.5, -16, 1.1, 2.2]], 'brick');
+    wall('z', 2.7, 3, -20.7, -13.3, 0, 3.2, [], 'brick');
     B.box([-4, 3.2, -21], [3, 3.4, -13], 'roof');
     B.box([-4, 3.4, -21], [3, 3.7, -20.8], 'trim');
     B.box([-4, 3.4, -13.2], [3, 3.7, -13], 'trim');
@@ -255,10 +260,10 @@ export function buildMap(world, scene) {
   B.box([-30.3, 0, 27], [30.3, H, 27.3], 'fence');
   B.box([-30.3, 0, -27], [-30, H, 27], 'fence');
   B.box([30, 0, -27], [30.3, H, 27], 'fence');
-  world.add([-31, 0, -28], [31, 30, -27.3]);
-  world.add([-31, 0, 27.3], [31, 30, 28]);
-  world.add([-31, 0, -28], [-30.3, 30, 28]);
-  world.add([30.3, 0, -28], [31, 30, 28]);
+  world.add([-31, 0, -28], [31, 30, -27.3], 'invisible');
+  world.add([-31, 0, 27.3], [31, 30, 28], 'invisible');
+  world.add([-31, 0, -28], [-30.3, 30, 28], 'invisible');
+  world.add([30.3, 0, -28], [31, 30, 28], 'invisible');
   // street-end hedges
   B.box([-29.9, 0, -4.5], [-28.6, 1.6, 4.5], 'hedge');
   B.box([28.6, 0, -4.5], [29.9, 1.6, 4.5], 'hedge');
@@ -293,6 +298,10 @@ export function buildMap(world, scene) {
       metalness: name === 'metal' ? 0.15 : 0, emissive: m.emissive || '#000000', emissiveIntensity: m.emissive ? 0.8 : 0,
     });
     if (name === 'glass') { mat.transparent = true; mat.opacity = 0.75; }
+    // Every material sits on its own depth layer, so coplanar faces of different
+    // materials never fight: the higher rank always wins.
+    const rank = RANK[name] ?? 3;
+    if (rank > 0) { mat.polygonOffset = true; mat.polygonOffsetFactor = -0.5 * rank; mat.polygonOffsetUnits = -2 * rank; }
     const mesh = new THREE.Mesh(bk.toGeometry(), mat);
     mesh.castShadow = name !== 'grass' && name !== 'asphalt' && name !== 'glass';
     mesh.receiveShadow = true;

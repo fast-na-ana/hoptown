@@ -12,52 +12,78 @@
 <canvas id="game"></canvas>
 
 <div id="menu">
-  <div class="menu-card">
-    <h1>HOP<span>TOWN</span></h1>
-    <p class="tag">fast-movement arena shooter · map: Maple Court</p>
-    <div class="row"><label>Name</label><input id="name" maxlength="16" autocomplete="off"></div>
-    <div class="row"><label>Colour</label><div id="swatches"></div></div>
-    <div class="cols">
-      <div class="panel">
-        <h3>Play vs Bots</h3>
-        <div class="row"><label>Bots <b id="bots-val"></b></label><input id="bots" type="range" min="0" max="9" step="1"></div>
-        <div class="row"><label>Difficulty <b id="difficulty-val"></b></label><input id="difficulty" type="range" min="0" max="3" step="1"></div>
-        <button id="play-bots" class="big">PLAY</button>
+  <div class="ticker"><div class="ticker-track"><span>BUNNY HOP ✦ SLIDE ✦ DOUBLE JUMP ✦ BLINK ✦ FRAG OUT ✦ ONE-TAP KNIFE ✦ BOLT-ACTION ✦ </span><span>BUNNY HOP ✦ SLIDE ✦ DOUBLE JUMP ✦ BLINK ✦ FRAG OUT ✦ ONE-TAP KNIFE ✦ BOLT-ACTION ✦ </span></div></div>
+  <div class="nb">
+    <header class="nb-head">
+      <h1 class="logo">HOP<br>TOWN<span class="sticker">FFA</span></h1>
+      <div class="head-meta">
+        <p class="mono">FAST-MOVEMENT ARENA SHOOTER<br>BROWSER BUILD 0.3 · NO DOWNLOAD</p>
+        <div class="field">
+          <label class="mono" for="name">CALLSIGN</label>
+          <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <span class="mono lbl">COLOUR</span>
+          <div id="swatches"></div>
+        </div>
       </div>
-      <div class="panel">
-        <h3>Multiplayer</h3>
-        <div class="row"><label>Room code</label><input id="room" maxlength="12" placeholder="leave empty to create" autocomplete="off"></div>
-        <p class="hint" id="room-hint">Create a room, then share the link. The bot slider applies here too.</p>
-        <button id="play-online" class="big alt">CREATE / JOIN</button>
-        <p id="status" class="hint"></p>
+    </header>
+
+    <section class="win preview">
+      <div class="win-bar"><i></i><i></i><i></i><span class="mono">MAP_01 / MAPLE COURT</span><b class="mono live-tag">LIVE</b></div>
+      <canvas id="preview"></canvas>
+      <div class="map-tags"><span>2 HOUSES</span><span>ROOFTOPS</span><span>JUMP PADS</span></div>
+    </section>
+
+    <section class="card solo">
+      <div class="card-head"><span class="num">01</span><h2>SOLO VS BOTS</h2></div>
+      <div class="field">
+        <label class="mono" for="bots">BOTS <b id="bots-val"></b></label>
+        <input id="bots" type="range" min="0" max="9" step="1">
       </div>
-    </div>
-    <details>
-      <summary>Settings</summary>
-      <div class="row"><label>Sensitivity <b id="sens-val"></b></label><input id="sens" type="range" min="0.1" max="4" step="0.05"></div>
-      <div class="row"><label>Field of view <b id="fov-val"></b></label><input id="fov" type="range" min="60" max="100" step="1"></div>
-      <div class="row"><label>Volume <b id="volume-val"></b></label><input id="volume" type="range" min="0" max="1" step="0.05"></div>
-      <div class="row"><label>Shadows</label><input id="shadows" type="checkbox"></div>
-      <div class="row"><label>Invert mouse Y</label><input id="invert" type="checkbox"></div>
-    </details>
-    <details>
-      <summary>Controls</summary>
-      <table class="controls">
-        <tr><td>WASD</td><td>Move</td><td>Mouse</td><td>Aim · LMB fire · RMB aim down sights</td></tr>
-        <tr><td>Space</td><td>Jump · press again in air to double jump · hold to bunny hop</td><td>Shift / C</td><td>Crouch · while running = slide</td></tr>
-        <tr><td>1 / 2 / 3 / Wheel</td><td>Rifle / Pistol / Knife</td><td>R</td><td>Reload</td></tr>
-        <tr><td>G</td><td>Grenade</td><td>Q (or E)</td><td>Throw blink disc · press again to teleport to it</td></tr>
-        <tr><td>V</td><td>Quick knife (one-hit kill, very close)</td><td>3</td><td>Hold knife (move faster)</td></tr>
-        <tr><td>H</td><td>Show / hide the in-game help</td><td></td><td></td></tr>
-        <tr><td>Tab</td><td>Scoreboard</td><td>Esc</td><td>Menu</td></tr>
-      </table>
-      <p class="hint">Tips: strafe (A/D) while turning the mouse in the air to gain speed. Slide-jump keeps momentum. Cyan pads launch you onto the roofs.</p>
-    </details>
+      <div class="field">
+        <span class="mono lbl">DIFFICULTY</span>
+        <div class="seg" id="diff-seg"><button type="button" data-d="0">EASY</button><button type="button" data-d="1">MEDIUM</button><button type="button" data-d="2">HARD</button><button type="button" data-d="3">LEGEND</button></div>
+      </div>
+      <button id="play-bots" class="go">PLAY <span>→</span></button>
+    </section>
+
+    <section class="card online">
+      <div class="card-head"><span class="num">02</span><h2>ONLINE ROOM</h2></div>
+      <div class="field">
+        <label class="mono" for="room">ROOM CODE</label>
+        <input id="room" maxlength="12" placeholder="EMPTY = NEW ROOM" autocomplete="off" spellcheck="false">
+      </div>
+      <p class="mono hint" id="room-hint">Peer-to-peer. Create a room, send the link. Bots fill empty slots.</p>
+      <button id="play-online" class="go">CREATE / JOIN <span>→</span></button>
+      <p id="status" class="mono hint"></p>
+    </section>
+
+    <section class="card tabs">
+      <div class="tab-bar"><button type="button" class="tab on" data-tab="controls">CONTROLS</button><button type="button" class="tab" data-tab="settings">SETTINGS</button></div>
+      <div class="tab-body on" id="tab-controls">
+        <table class="controls">
+          <tr><td><kbd>WASD</kbd></td><td>move</td><td><kbd>SPACE</kbd></td><td>jump · again in air = double · hold = hop</td></tr>
+          <tr><td><kbd>SHIFT</kbd></td><td>crouch · slide when running</td><td><kbd>LMB</kbd> <kbd>RMB</kbd></td><td>fire · aim / scope</td></tr>
+          <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>rifle · sniper · pistol · knife</td><td><kbd>R</kbd></td><td>reload</td></tr>
+          <tr><td><kbd>G</kbd></td><td>frag grenade</td><td><kbd>Q</kbd></td><td>blink disc · again = warp</td></tr>
+          <tr><td><kbd>V</kbd></td><td>quick knife (one hit)</td><td><kbd>TAB</kbd> <kbd>H</kbd></td><td>scores · help</td></tr>
+        </table>
+      </div>
+      <div class="tab-body" id="tab-settings">
+        <div class="field"><label class="mono" for="sens">SENSITIVITY <b id="sens-val"></b></label><input id="sens" type="range" min="0.1" max="4" step="0.05"></div>
+        <div class="field"><label class="mono" for="fov">FIELD OF VIEW <b id="fov-val"></b></label><input id="fov" type="range" min="60" max="100" step="1"></div>
+        <div class="field"><label class="mono" for="volume">VOLUME <b id="volume-val"></b></label><input id="volume" type="range" min="0" max="1" step="0.05"></div>
+        <div class="checks"><label class="chk"><input id="shadows" type="checkbox"><span>SHADOWS</span></label><label class="chk"><input id="invert" type="checkbox"><span>INVERT Y</span></label></div>
+      </div>
+    </section>
   </div>
 </div>
 
 <div id="hud" style="display:none">
   <div id="vignette"></div>
+  <div id="lowhp"></div>
+  <div id="scope"><div class="lens"></div><div class="reticle"><i class="h"></i><i class="v"></i><i class="dot"></i><i class="m1"></i><i class="m2"></i><i class="m3"></i></div></div>
   <div id="dmg-layer"></div>
 
   <div id="match">
@@ -100,8 +126,9 @@
       <li><kbd>A</kbd>/<kbd>D</kbd> + mouse turn in the air = <b>air strafe</b> for more speed</li>
       <li><kbd>G</kbd> <b>Frag grenade</b> · 2 charges, refills over time · blast knocks you back</li>
       <li><kbd>Q</kbd> <b>Blink</b> · throw the disc, press <kbd>Q</kbd> again to <b>teleport</b> to it</li>
-      <li><kbd>V</kbd> <b>Quick knife</b> · very close range · one hit = one kill · <kbd>3</kbd> to hold it</li>
-      <li><kbd>RMB</kbd> aim · <kbd>R</kbd> reload · <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> weapons · <kbd>Tab</kbd> scores</li>
+      <li><kbd>V</kbd> <b>Quick knife</b> · very close range · one hit = one kill · <kbd>4</kbd> to hold it</li>
+      <li><kbd>1</kbd> rifle · <kbd>2</kbd> sniper (scope with <kbd>RMB</kbd>) · <kbd>3</kbd> pistol · <kbd>4</kbd> knife</li>
+      <li><kbd>RMB</kbd> aim · <kbd>R</kbd> reload · <kbd>Tab</kbd> scores</li>
       <li>Cyan pads in the backyards launch you onto the roofs</li>
     </ul>
   </div>
@@ -117,14 +144,16 @@
 </div>
 
 <div id="pause" style="display:none">
-  <div class="menu-card small">
-    <h2>PAUSED</h2>
-    <p id="pause-room" class="hint"></p>
-    <button id="resume" class="big">RESUME</button>
-    <button id="copy-link" class="alt">Copy invite link</button>
-    <div id="pause-bots-row"><div class="row"><label>Bots <b id="pause-bots-val"></b></label><input id="pause-bots" type="range" min="0" max="9" step="1"></div>
-    <div class="row"><label>Difficulty <b id="pause-diff-val"></b></label><input id="pause-diff" type="range" min="0" max="3" step="1"></div></div>
-    <button id="quit" class="ghost">Leave match</button>
+  <div class="card pause-card">
+    <div class="card-head"><span class="num">II</span><h2>PAUSED</h2></div>
+    <p id="pause-room" class="mono hint"></p>
+    <button id="resume" class="go">RESUME <span>→</span></button>
+    <button id="copy-link" class="btn">COPY INVITE LINK</button>
+    <div id="pause-bots-row">
+      <div class="field"><label class="mono" for="pause-bots">BOTS <b id="pause-bots-val"></b></label><input id="pause-bots" type="range" min="0" max="9" step="1"></div>
+      <div class="field"><span class="mono lbl">DIFFICULTY</span><div class="seg" id="pause-seg"><button type="button" data-d="0">EASY</button><button type="button" data-d="1">MED</button><button type="button" data-d="2">HARD</button><button type="button" data-d="3">LEGEND</button></div></div>
+    </div>
+    <button id="quit" class="btn ghost">LEAVE MATCH</button>
   </div>
 </div>
 

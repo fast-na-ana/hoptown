@@ -9,6 +9,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@fontsource-variable/archivo": "^5.3.0",
+    "@fontsource/archivo-black": "^5.3.0",
+    "@fontsource/space-mono": "^5.3.0",
     "esbuild": "^0.28.2",
     "puppeteer-core": "^25.18.1",
     "three": "^0.170.0",

@@ -56,6 +56,12 @@ function tone(dest, t, dur, f0, f1, gain, type = 'sine') {
 export const sfx = {
   shot(weapon, pos) {
     const d = spatial(pos, 90); if (!d) return; const t = ctx.currentTime;
+    if (weapon === 'sniper') {
+      noiseBurst(d, t, 0.45, 900, 0.6, 1.2);
+      noiseBurst(d, t, 0.12, 3800, 0.9, 0.5);
+      tone(d, t, 0.35, 120, 30, 0.9, 'triangle');
+      return;
+    }
     if (weapon === 'rifle') {
       noiseBurst(d, t, 0.16, 1400, 0.7, 0.9);
       noiseBurst(d, t, 0.09, 4200, 1.0, 0.35);
@@ -93,6 +99,7 @@ export const sfx = {
   streak() { const d = spatial(null); if (!d) return; const t = ctx.currentTime; [523, 659, 784, 1046].forEach((f, i) => tone(d, t + i * 0.07, 0.2, f, f, 0.18, 'triangle')); },
   swing(pos) { const d = spatial(pos, 20); if (!d) return; noiseBurst(d, ctx.currentTime, 0.16, 2600, 0.7, 0.35, 'highpass'); },
   stab(pos) { const d = spatial(pos, 25); if (!d) return; const t = ctx.currentTime; noiseBurst(d, t, 0.12, 700, 1.2, 0.6, 'lowpass'); tone(d, t, 0.1, 180, 70, 0.4, 'triangle'); },
+  bolt() { const d = spatial(null); if (!d) return; const t = ctx.currentTime; noiseBurst(d, t + 0.08, 0.05, 2600, 3, 0.35); noiseBurst(d, t + 0.25, 0.06, 2000, 3, 0.4); tone(d, t + 0.3, 0.04, 900, 700, 0.12, 'square'); },
   tick() { const d = spatial(null); if (!d) return; tone(d, ctx.currentTime, 0.06, 880, 880, 0.2, 'sine'); },
   go() { const d = spatial(null); if (!d) return; tone(d, ctx.currentTime, 0.3, 1320, 1320, 0.25, 'sine'); },
 };

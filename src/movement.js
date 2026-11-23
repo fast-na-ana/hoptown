@@ -143,10 +143,12 @@ export function stepMovement(s, inp, dt, world) {
   const rz1 = world.sweepAxis(a0, a1, 2, dz);
   let useMin = a0, useMax = a1, hitX = rx1.hit, hitZ = rz1.hit;
 
-  if ((rx1.hit || rz1.hit) && (wasGround || s.vel[1] <= 0.5)) {
+  // ledge mantle: in the air (not rising fast) we may climb a bit more than a stair step
+  const airborneMantle = !wasGround && s.vel[1] < 4 && (wx !== 0 || wz !== 0);
+  if ((rx1.hit || rz1.hit) && (wasGround || s.vel[1] <= 0.5 || airborneMantle)) {
     // stepped move: up, across, down
     const b0 = [...mn], b1 = [...mx];
-    const up = world.sweepAxis(b0, b1, 1, PLAYER.stepHeight);
+    const up = world.sweepAxis(b0, b1, 1, wasGround ? PLAYER.stepHeight : PLAYER.mantleHeight);
     const rx2 = world.sweepAxis(b0, b1, 0, dx);
     const rz2 = world.sweepAxis(b0, b1, 2, dz);
     const down = world.sweepAxis(b0, b1, 1, -up.moved);
@@ -155,7 +157,7 @@ export function stepMovement(s, inp, dt, world) {
     // only accept if we land on something (down hit) or were airborne going down
     if (d2 > d1 + 1e-4 && (down.hit || !wasGround)) {
       useMin = b0; useMax = b1; hitX = rx2.hit; hitZ = rz2.hit;
-      if (b0[1] > mn[1] + 0.05) s.events.push('step');
+      if (b0[1] > mn[1] + 0.05) { s.events.push(wasGround ? 'step' : 'mantle'); if (!wasGround) { s.vel[1] = Math.max(0, s.vel[1]); } }
     }
   }
   if (hitX) s.vel[0] = 0;

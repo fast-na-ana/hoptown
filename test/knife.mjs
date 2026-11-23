@@ -23,7 +23,7 @@ const r = await p.evaluate(async () => {
   out.nearKnife = { alive: B.alive, kills: L.kills };
   // equipped knife slash
   await wait(3.3); B.ms.pos = [0,0,6]; B.protectUntil = 0;
-  g.input.pressed.add('Digit3'); await wait(0.3);
+  g.input.pressed.add('Digit4'); await wait(0.3);
   out.weapon = L.weapon;
   L.ms.pos = [0.4,0,7.7]; aimAt(1.2); g.input.mouseL = true; await wait(0.2); g.input.mouseL = false;
   out.slash = { alive: B.alive, kills: L.kills };
@@ -41,7 +41,7 @@ await p.evaluate(async () => { const g = window.__hoptown.game; g.input.mouseR =
 await shot('rifle-ads');
 await p.evaluate(async () => { const g = window.__hoptown.game; g.input.mouseR = false; g.local.mag.rifle = 10; g.input.pressed.add('KeyR'); const t0=g.time; while (g.time-t0<0.85) await new Promise(r=>setTimeout(r,16)); });
 await shot('rifle-reload');
-await p.evaluate(async () => { const g = window.__hoptown.game; const t0=g.time; while (g.time-t0<1.5) await new Promise(r=>setTimeout(r,16)); g.input.pressed.add('Digit2'); const t1=g.time; while (g.time-t1<0.6) await new Promise(r=>setTimeout(r,16)); });
+await p.evaluate(async () => { const g = window.__hoptown.game; const t0=g.time; while (g.time-t0<1.5) await new Promise(r=>setTimeout(r,16)); g.input.pressed.add('Digit3'); const t1=g.time; while (g.time-t1<0.6) await new Promise(r=>setTimeout(r,16)); });
 await shot('pistol-hip');
 await p.evaluate(async () => { const g = window.__hoptown.game; g.input.mouseR = true; const t0=g.time; while (g.time-t0<0.5) await new Promise(r=>setTimeout(r,16)); });
 await shot('pistol-ads');

@@ -76,7 +76,7 @@ export class Game {
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
     scene.add(sun); scene.add(sun.target);
     this.sun = sun;
-    this.camera = new THREE.PerspectiveCamera(this.settings.fov || 75, 1, 0.05, 400);
+    this.camera = new THREE.PerspectiveCamera(this.settings.fov || 75, 1, 0.1, 400);
     this.camera.rotation.order = 'YXZ';
   }
 
@@ -94,7 +94,7 @@ export class Game {
       ms: (isLocal || (isBot && owner === this.selfId)) ? makeMoveState([0, 0, 0]) : null,
       prevPos: [0, 0, 0], rpos: [0, -50, 0], rvel: [0, 0, 0], rc: false, rg: true, snaps: [],
       yaw: 0, pitch: 0, hp: PLAYER.maxHealth, alive: false, respawnAt: 0, protectUntil: 0,
-      weapon: 'rifle', mag: { rifle: WEAPONS.rifle.mag, pistol: WEAPONS.pistol.mag }, reloadUntil: 0, nextShot: 0, bloom: 0,
+      weapon: 'rifle', mag: { rifle: WEAPONS.rifle.mag, sniper: WEAPONS.sniper.mag, pistol: WEAPONS.pistol.mag }, reloadUntil: 0, nextShot: 0, bloom: 0,
       nades: GRENADE.max, nadeT: 0, blinkCd: 0, blink: null, nextMelee: 0,
       kills: 0, deaths: 0, score: 0, streak: 0, best: 0, wins: 0, lastHurt: -99, lastSeen: now(), killedBy: null,
       avatar: null,
@@ -143,7 +143,7 @@ export class Game {
     p.ms.vel = [0, 0, 0]; p.ms.onGround = false; p.ms.sliding = false; p.ms.crouching = false; p.ms.height = PLAYER.height;
     p.prevPos = [...p.ms.pos];
     p.hp = PLAYER.maxHealth; p.alive = true; p.protectUntil = this.time + PLAYER.spawnProtect;
-    p.mag.rifle = WEAPONS.rifle.mag; p.mag.pistol = WEAPONS.pistol.mag; p.reloadUntil = 0; p.bloom = 0;
+    p.mag.rifle = WEAPONS.rifle.mag; p.mag.sniper = WEAPONS.sniper.mag; p.mag.pistol = WEAPONS.pistol.mag; p.spray = 0; p.reloadUntil = 0; p.bloom = 0;
     p.nades = GRENADE.max; p.nadeT = 0; p.blinkCd = 0; p.blink = null; p.weapon = 'rifle';
     p.yaw = Math.atan2(spot[0], spot[2]); // face roughly toward the centre
     p.pitch = 0;
@@ -168,6 +168,7 @@ export class Game {
       const color = COLORS[(n + 1) % COLORS.length];
       const p = this.addPlayer(id, { name, color, isBot: true, owner: this.selfId });
       const bot = new Bot(this, p, this.difficulty);
+      if (n % 4 === 3) bot.role = 'sniper';
       this.bots.push(bot); mine.push(bot);
       this.spawn(p);
     }
@@ -191,7 +192,7 @@ export class Game {
     const sp = Math.hypot(vel[0], vel[2]);
     if (!onGround) s += W.airSpread * (1 - adsAmt * 0.5);
     else if (sp > 1) s += W.moveSpread * Math.min(1, sp / 7) * (1 - adsAmt * 0.6);
-    return s * (p.spreadMul || 1);
+    return s * (p.spreadMul || 1) + (p.spreadAdd || 0);
   }
 
   canShoot(p) {
@@ -242,8 +243,9 @@ export class Game {
       dmg = Math.round(dmg);
       if (!target.isLocal) this.effects.blood(point, target.color);
       this.applyHit(p, target, dmg, head, p.weapon);
-    } else if (wh) {
+    } else if (wh && wh.box.tag !== 'invisible') {
       this.effects.impact(point, wh.normal);
+      this.effects.hole(point, wh.normal, p.weapon === 'sniper' ? 1.5 : p.weapon === 'pistol' ? 0.85 : 1);
     }
     if (this.net && (p.isLocal || p.isBot)) this.net.send('shot', { id: p.id, o: from.map(r2), e: point.map(r2), w: p.weapon });
     if (p.mag[p.weapon] <= 0) this.reload(p);
@@ -259,6 +261,25 @@ export class Game {
       body: [[pos[0] - r, pos[1], pos[2] - r], [pos[0] + r, pos[1] + h - headH, pos[2] + r]],
       head: [[pos[0] - 0.24, pos[1] + h - headH, pos[2] - 0.24], [pos[0] + 0.24, pos[1] + h + 0.02, pos[2] + 0.24]],
     };
+  }
+
+  // Spray pattern: the first shots climb straight up; longer bursts add a left/right sway.
+  recoilKick(W, i) {
+    if (W.pattern) {
+      const r = () => (Math.random() - 0.5);
+      if (i < 3) return [0.0042 + r() * 0.0008, r() * 0.0004];
+      if (i < 9) return [0.0082 + r() * 0.001, r() * 0.0012];
+      const sway = Math.sin((i - 9) * 0.52 + 0.5);
+      return [0.0016 + r() * 0.0008, 0.0068 * sway + r() * 0.0012];
+    }
+    return [W.recoilPitch * (0.85 + Math.random() * 0.3), (Math.random() - 0.5) * 2 * W.recoilYaw];
+  }
+
+  // Scoped weapons only become accurate once fully scoped in.
+  adsAccuracy(p, ads) {
+    const W = WEAPONS[p.weapon];
+    if (W.scope) return ads > 0.92 ? 1 : ads * 0.25;
+    return ads;
   }
 
   reload(p) {
@@ -486,15 +507,16 @@ export class Game {
       const c = [pp[0], pp[1] + 0.9, pp[2]];
       const d = Math.hypot(c[0] - pos[0], c[1] - pos[1], c[2] - pos[2]);
       if (d > GRENADE.radius) continue;
-      const src = [pos[0], pos[1] + 0.15, pos[2]];
-      if (!this.world.lineOfSight(src, c) && !this.world.lineOfSight(src, [pp[0], pp[1] + 1.6, pp[2]])) continue;
+      const src = [pos[0], pos[1] + 0.2, pos[2]];
+      const visible = [pp[1] + 0.3, pp[1] + 0.9, pp[1] + 1.6].some(y => this.world.lineOfSight(src, [pp[0], y, pp[2]]));
+      if (!visible && d > 3) continue;
       const k = 1 - d / GRENADE.radius;
-      let dmg = GRENADE.maxDamage * (0.25 + 0.75 * k);
+      let dmg = GRENADE.maxDamage * (GRENADE.minFrac + (1 - GRENADE.minFrac) * k) * (visible ? 1 : 0.55);
       if (p.id === ownerId) dmg *= GRENADE.selfDamageMul;
       // knockback (nade jumps!)
       const dir = [c[0] - pos[0], c[1] - pos[1] + 0.6, c[2] - pos[2]];
       const dl = Math.hypot(...dir) || 1;
-      const push = 11 * k;
+      const push = 14 * k;
       p.ms.vel[0] += dir[0] / dl * push; p.ms.vel[1] += dir[1] / dl * push; p.ms.vel[2] += dir[2] / dl * push;
       p.ms.onGround = false;
       this.damage(p, Math.round(dmg), ownerId, 'grenade', false, pos);
@@ -523,6 +545,7 @@ export class Game {
       for (const p of this.players.values()) { p.kills = 0; p.deaths = 0; p.score = 0; p.streak = 0; p.best = 0; }
       for (const p of this.players.values()) if (this.simulatedHere(p)) this.spawn(p);
       for (const pr of this.projectiles) pr.dead = true;
+      this.effects.clearHoles();
       this.hud.scoreboard(false, []);
     }
     if (ph === 'play') { sfx.go(); this.hud.announce('FIGHT!', `First to ${this.match.killLimit} kills`); }
@@ -616,7 +639,9 @@ export class Game {
       this.effects.tracer(d.o, d.e);
       this.effects.muzzleFlash(d.o, 0.5);
       if (p.avatar) p.avatar.shoot();
-      this.effects.impact(d.e, null);
+      const dx = d.e[0] - d.o[0], dy = d.e[1] - d.o[1], dz = d.e[2] - d.o[2], dl = Math.hypot(dx, dy, dz) || 1;
+      const h = this.world.raycast(d.o[0], d.o[1], d.o[2], dx / dl, dy / dl, dz / dl, dl + 0.2);
+      if (h && h.box.tag !== 'invisible' && Math.abs(h.t - dl) < 0.25) { this.effects.impact(d.e, h.normal); this.effects.hole(d.e, h.normal, d.w === 'sniper' ? 1.5 : 1); }
       sfx.shot(d.w, d.o);
     });
     net.on('nade', (d) => {
@@ -734,13 +759,14 @@ export class Game {
 
     // --- local actions
     const canAct = L.alive && this.match.phase !== 'end';
-    const adsHeld = inputActive && inp.mouseR && L.alive && this.time >= L.reloadUntil;
-    this.view.ads += ((adsHeld ? 1 : 0) - this.view.ads) * Math.min(1, dt * 14);
+    const adsHeld = inputActive && inp.mouseR && L.alive && this.time >= L.reloadUntil && !WEAPONS[L.weapon].melee;
+    const adsRate = WEAPONS[L.weapon].scope ? 11 : 14;
+    this.view.ads += ((adsHeld ? 1 : 0) - this.view.ads) * Math.min(1, dt * adsRate);
+    if (Math.abs(this.view.ads - (adsHeld ? 1 : 0)) < 0.01) this.view.ads = adsHeld ? 1 : 0;
     if (canAct) {
-      if (pressed.has('Digit1')) this.switchWeapon(L, 'rifle');
-      if (pressed.has('Digit2')) this.switchWeapon(L, 'pistol');
-      if (pressed.has('Digit3')) this.switchWeapon(L, 'knife');
-      if (pressed.has('wheel')) this.switchWeapon(L, { rifle: 'pistol', pistol: 'knife', knife: 'rifle' }[L.weapon]);
+      const order = ['rifle', 'sniper', 'pistol', 'knife'];
+      order.forEach((w, i) => { if (pressed.has('Digit' + (i + 1))) this.switchWeapon(L, w); });
+      if (pressed.has('wheel')) this.switchWeapon(L, order[(order.indexOf(L.weapon) + (this.input.wheelDir < 0 ? 3 : 1)) % 4]);
       if (pressed.has('KeyV') && L.weapon !== 'knife') { if (this.melee(L, aimYaw, aimPitch)) this.vm.quickKnife(); }
       if (pressed.has('KeyR')) this.reload(L);
       if (pressed.has('KeyG')) this.throwGrenade(L, aimYaw, aimPitch);
@@ -754,24 +780,32 @@ export class Game {
         inp.clickL = false;
       } else if (wantFire && this.match.phase !== 'end') {
         if (this.canShoot(L)) {
-                    const muzzle = this._vmMuzzleWorld();
-          this.fire(L, aimYaw, aimPitch, this.view.ads, muzzle);
+          const muzzle = this._vmMuzzleWorld();
+          if (this.time - (L.lastShotT ?? -9) > (W.sprayReset || 0.3)) L.spray = 0;
+          this.fire(L, aimYaw, aimPitch, this.adsAccuracy(L, this.view.ads), muzzle);
+          L.lastShotT = this.time;
           this.vm.fire(L.weapon);
-          const rk = 1 - this.view.ads * 0.35;
-          this.view.recoil += W.recoilPitch * rk * (0.8 + Math.random() * 0.4);
-          this.view.recoilYaw += (Math.random() - 0.5) * 2 * W.recoilYaw * rk;
+          const [kp, ky] = this.recoilKick(W, L.spray || 0);
+          const rk = 1 - this.view.ads * 0.25;
+          this.view.recoil += kp * rk;
+          this.view.recoilYaw += ky * rk;
+          L.spray = (L.spray || 0) + 1;
+          if (W.bolt && L.mag[L.weapon] > 0) { this.vm.bolt(W.interval); sfx.bolt(); }
           inp.clickL = false;
         } else if (L.mag[L.weapon] <= 0 && inp.clickL) { sfx.dry(); this.reload(L); inp.clickL = false; }
         else if (!W.auto && this.time + 0.12 < L.nextShot) inp.clickL = false; // too early: drop buffered click
       } else if (!W.auto) inp.clickL = false;
     } else inp.clickL = false;
-    if (!(inp.mouseL && inputActive)) {
+    const spraying = inp.mouseL && inputActive && WEAPONS[L.weapon].auto && this.time - (L.lastShotT ?? -9) < 0.2;
+    if (!spraying) {
       L.bloom = Math.max(0, L.bloom - dt * 0.12);
-      this.view.recoil *= Math.exp(-dt * 9);
-      this.view.recoilYaw *= Math.exp(-dt * 9);
+      const rec = WEAPONS[L.weapon].bolt ? 6 : 7.5;
+      this.view.recoil *= Math.exp(-dt * rec);
+      this.view.recoilYaw *= Math.exp(-dt * rec);
     } else {
-      this.view.recoil *= Math.exp(-dt * 3.2);
-      this.view.recoilYaw *= Math.exp(-dt * 3.5);
+      // while spraying the pattern mostly sticks, so the climb and sway are felt (and can be pulled against)
+      this.view.recoil *= Math.exp(-dt * 0.6);
+      this.view.recoilYaw *= Math.exp(-dt * 0.6);
     }
     if (pressed.has('KeyH')) { this.helpShown = !this.helpShown; this.helpUntil = Infinity; }
     inp.pressed.clear();
@@ -799,7 +833,7 @@ export class Game {
       mvIn.crouch = keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyC') || keys.has('ControlLeft');
       mvIn.yaw = this.view.yaw;
       mvIn.ads = this.view.ads > 0.5;
-      mvIn.speedMul = L.weapon === 'knife' ? KNIFE.speedMul : 1;
+      mvIn.speedMul = L.weapon === 'knife' ? KNIFE.speedMul : (WEAPONS[L.weapon].speedMul || 1);
     }
     this.acc += dt;
     let steps = 0;
@@ -902,11 +936,14 @@ export class Game {
       v.roll += ((L.ms.sliding ? 0.06 : 0) - v.roll) * Math.min(1, dt * 8);
       v.fovKick += (Math.max(0, sp - 8) * 0.9 - v.fovKick) * Math.min(1, dt * 4);
       cam.rotation.set(v.pitch + v.recoil, v.yaw + v.recoilYaw, v.roll);
-      const adsMul = 1 + (WEAPONS[L.weapon].adsFov - 1) * v.ads;
+      const Wc = WEAPONS[L.weapon];
+      this.scoped = !!Wc.scope && v.ads > 0.85;
+      const adsMul = Wc.scope ? (this.scoped ? Wc.adsFov : 1 + (0.8 - 1) * v.ads) : 1 + (Wc.adsFov - 1) * v.ads;
       cam.fov = (baseFov + v.fovKick * (1 - v.ads)) * adsMul;
       this.vm.update(dt, { ads: v.ads > 0.5, speed: sp, onGround: L.ms.onGround, mouseDX: mdx, mouseDY: mdy, sliding: L.ms.sliding, vy: L.ms.vel[1] });
       this.deathCam = null;
     } else if (this.deathCam) {
+      this.scoped = false;
       const dc = this.deathCam; dc.t += dt;
       const k = Math.min(1, dc.t * 1.5);
       cam.position.set(dc.from[0], dc.from[1] + 1.6 + k * 2.5, dc.from[2]);
@@ -946,7 +983,9 @@ export class Game {
       blink: blinkActive ? 'active' : L.blinkCd > 0 ? 'cooldown' : 'ready', blinkPct: L.blinkCd / BLINK.cooldown, blinkCd: L.blinkCd,
       knifeReady: this.time >= L.nextMelee,
     });
-    h.setCrosshair(this.spreadFor(L, this.view.ads), L.alive && this.view.ads < 0.6, L.weapon === 'knife');
+    h.setCrosshair(this.spreadFor(L, this.adsAccuracy(L, this.view.ads)), L.alive && this.view.ads < 0.6, L.weapon === 'knife');
+    h.setScope(!!this.scoped, this.time < L.nextShot);
+    h.setLowHealth(L.alive && L.hp < 20, L.hp);
     h.setStreak(L.streak);
     // contextual prompt
     let prompt = '';
@@ -990,7 +1029,7 @@ export class Game {
     r.autoClear = false;
     r.clear();
     r.render(this.scene, this.camera);
-    if (this.local.alive) { r.clearDepth(); r.render(this.vm.scene, this.vm.camera); }
+    if (this.local.alive && !this.scoped) { r.clearDepth(); r.render(this.vm.scene, this.vm.camera); }
   }
 
   dispose() {

@@ -4,6 +4,7 @@ import { initAudio, setVolume } from './audio.js';
 import { LocalNet, RtcNet } from './net.js';
 import { COLORS } from './config.js';
 import { DIFFICULTIES } from './bots.js';
+import { MenuPreview } from './preview.js';
 import { stepMovement, makeMoveState, emptyInput } from './movement.js';
 
 const $ = (id) => document.getElementById(id);
@@ -43,11 +44,23 @@ COLORS.forEach(c => {
 });
 $('bots').value = store.get('bots', 5); $('bots-val').textContent = $('bots').value;
 $('bots').oninput = () => { $('bots-val').textContent = $('bots').value; };
-const DIFF_LABELS = ['Easy', 'Medium', 'Hard', 'Legendary'];
-let diffIdx = Math.max(0, DIFFICULTIES.indexOf(store.get('difficulty', 'medium')));
+let diffIdx = DIFFICULTIES.indexOf(store.get('difficulty', 'medium'));
 if (diffIdx < 0) diffIdx = 1;
-$('difficulty').value = diffIdx; $('difficulty-val').textContent = DIFF_LABELS[diffIdx];
-$('difficulty').oninput = () => { diffIdx = +$('difficulty').value; $('difficulty-val').textContent = DIFF_LABELS[diffIdx]; store.set('difficulty', DIFFICULTIES[diffIdx]); };
+function paintSeg() {
+  for (const seg of [$('diff-seg'), $('pause-seg')]) seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.d === diffIdx));
+}
+for (const seg of [$('diff-seg'), $('pause-seg')]) seg.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  diffIdx = +b.dataset.d; store.set('difficulty', DIFFICULTIES[diffIdx]); paintSeg();
+  if (game && game.isHost) game.setDifficulty(DIFFICULTIES[diffIdx]);
+});
+paintSeg();
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
+  document.querySelectorAll('.tab-body').forEach(x => x.classList.toggle('on', x.id === 'tab-' + t.dataset.tab));
+}));
+const preview = new MenuPreview($('preview'));
+if (!params.has('nopreview')) preview.start();
 $('room').value = params.get('room') || '';
 
 function bindRange(id, key, fmt = (v) => v) {
@@ -88,6 +101,7 @@ async function start(mode) {
     $('status').textContent = '';
   }
   if (game) game.dispose();
+  preview.stop();
   game = new Game(renderer, opts);
   $('menu').style.display = 'none';
   game.hud.show(true);
@@ -99,22 +113,17 @@ $('play-bots').onclick = () => start('offline');
 $('play-online').onclick = () => start('online');
 $('resume').onclick = () => { $('pause').style.display = 'none'; lock(); };
 $('copy-link').onclick = async () => {
-  try { await navigator.clipboard.writeText(location.href); $('copy-link').textContent = 'Copied!'; } catch { $('copy-link').textContent = location.href; }
-  setTimeout(() => $('copy-link').textContent = 'Copy invite link', 1500);
+  try { await navigator.clipboard.writeText(location.href); $('copy-link').textContent = 'COPIED ✓'; } catch { $('copy-link').textContent = location.href; }
+  setTimeout(() => $('copy-link').textContent = 'COPY INVITE LINK', 1500);
 };
 $('quit').onclick = () => {
   if (game) { game.dispose(); game = null; }
-  $('pause').style.display = 'none'; $('hud').style.display = 'none'; $('menu').style.display = 'flex';
+  $('pause').style.display = 'none'; $('hud').style.display = 'none'; $('menu').style.display = 'block';
+  preview.start();
   const url = new URL(location.href); url.searchParams.delete('room'); history.replaceState(null, '', url);
 };
-$('pause-diff').oninput = () => {
-  diffIdx = +$('pause-diff').value; $('pause-diff-val').textContent = DIFF_LABELS[diffIdx];
-  $('difficulty').value = diffIdx; $('difficulty-val').textContent = DIFF_LABELS[diffIdx];
-  store.set('difficulty', DIFFICULTIES[diffIdx]);
-  if (game && game.isHost) game.setDifficulty(DIFFICULTIES[diffIdx]);
-};
 $('pause-bots').oninput = () => { $('pause-bots-val').textContent = $('pause-bots').value; if (game && game.isHost) game.setBotCount(+$('pause-bots').value); store.set('bots', +$('pause-bots').value); };
-if (params.get('room')) $('room-hint').textContent = 'You were invited to room ' + params.get('room') + ' — press Join.';
+if (params.get('room')) $('room-hint').textContent = 'You were invited to room ' + params.get('room') + '. Hit JOIN.';
 
 // ---------------------------------------------------------------- input
 const canvas = $('game');
@@ -130,7 +139,7 @@ document.addEventListener('pointerlockchange', () => {
     game.input.keys.clear(); game.input.mouseL = false; game.input.mouseR = false;
     $('pause').style.display = 'flex';
     $('pause-bots').value = game.botCount; $('pause-bots-val').textContent = game.botCount;
-    const di = Math.max(0, DIFFICULTIES.indexOf(game.difficulty)); $('pause-diff').value = di; $('pause-diff-val').textContent = DIFF_LABELS[di];
+    diffIdx = Math.max(0, DIFFICULTIES.indexOf(game.difficulty)); paintSeg();
     $('pause-bots-row').style.display = game.isHost ? '' : 'none';
     $('pause-room').textContent = game.roomCode ? `Room ${game.roomCode}` : 'Offline match vs bots';
     $('copy-link').style.display = game.roomCode ? '' : 'none';
@@ -153,8 +162,8 @@ document.addEventListener('mouseup', (e) => {
   if (e.button === 2) game.input.mouseR = false;
 });
 document.addEventListener('contextmenu', (e) => { if (game) e.preventDefault(); });
-document.addEventListener('wheel', (e) => { if (game && document.pointerLockElement === canvas) game.input.pressed.add('wheel'); }, { passive: true });
-const gameKeys = new Set(['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyR', 'KeyC', 'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'KeyV', 'KeyH', 'ControlLeft']);
+document.addEventListener('wheel', (e) => { if (game && document.pointerLockElement === canvas) { game.input.wheelDir = Math.sign(e.deltaY); game.input.pressed.add('wheel'); } }, { passive: true });
+const gameKeys = new Set(['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyR', 'KeyC', 'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyV', 'KeyH', 'ControlLeft']);
 document.addEventListener('keydown', (e) => {
   if (!game) return;
   if (document.activeElement && document.activeElement.tagName === 'INPUT') return;

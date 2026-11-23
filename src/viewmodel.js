@@ -102,6 +102,59 @@ function buildRifle(P) {
   };
 }
 
+// ------------------------------------------------------------------ sniper
+function buildSniper(P) {
+  const g = new THREE.Group();
+  box(g, 0.07, 0.072, 0.46, P.metal, 0, 0.03, -0.04);                 // receiver
+  box(g, 0.072, 0.02, 0.4, P.accent, 0, -0.012, -0.06);                // accent chassis line
+  box(g, 0.078, 0.07, 0.3, P.poly, 0, 0.025, -0.36);                   // handguard
+  for (let i = 0; i < 5; i++) for (const sd of [-1, 1]) box(g, 0.004, 0.02, 0.03, P.dark, sd * 0.039, 0.03, -0.25 - i * 0.05);
+  cylZ(g, 0.012, 0.5, P.metal, 0, 0.03, -0.72);                        // barrel
+  for (let i = 0; i < 4; i++) box(g, 0.004, 0.004, 0.42, P.dark, Math.cos(i * 1.57) * 0.0115, 0.03 + Math.sin(i * 1.57) * 0.0115, -0.74);
+  cylZ(g, 0.022, 0.09, P.dark, 0, 0.03, -1.0, 8);                      // muzzle brake
+  for (const sd of [-1, 1]) box(g, 0.008, 0.012, 0.05, P.grey, sd * 0.021, 0.03, -1.0);
+  // scope
+  cylZ(g, 0.022, 0.34, P.poly, 0, 0.115, -0.08, 16);
+  cylZ(g, 0.034, 0.09, P.poly, 0, 0.115, -0.29, 16);
+  cylZ(g, 0.03, 0.07, P.poly, 0, 0.115, 0.12, 16);
+  const lensF = cylZ(g, 0.03, 0.004, P.lens, 0, 0.115, -0.337, 16);
+  const lensB = cylZ(g, 0.026, 0.004, P.lens, 0, 0.115, 0.157, 16);
+  const tur = new THREE.CylinderGeometry(0.014, 0.014, 0.03, 10);
+  const t1 = new THREE.Mesh(tur, P.accent); t1.position.set(0, 0.148, -0.08); g.add(t1);
+  const t2 = new THREE.Mesh(tur, P.poly); t2.rotation.z = Math.PI / 2; t2.position.set(0.033, 0.115, -0.08); g.add(t2);
+  for (const z of [-0.17, 0.02]) box(g, 0.05, 0.05, 0.03, P.dark, 0, 0.085, z);   // rings
+  // magazine + grip + trigger
+  const mag = new THREE.Group(); g.add(mag);
+  box(mag, 0.05, 0.09, 0.09, P.poly, 0, -0.065, -0.07);
+  box(mag, 0.052, 0.012, 0.092, P.accent, 0, -0.11, -0.07);
+  box(g, 0.044, 0.11, 0.05, P.poly, 0, -0.08, 0.1, -0.3);
+  box(g, 0.008, 0.006, 0.07, P.metal, 0, -0.04, 0.04);
+  box(g, 0.006, 0.022, 0.008, P.metal, 0, -0.028, 0.05, -0.2);
+  // skeleton stock
+  box(g, 0.05, 0.03, 0.3, P.poly, 0, 0.04, 0.33);
+  box(g, 0.05, 0.03, 0.26, P.poly, 0, -0.04, 0.35, 0.18);
+  box(g, 0.054, 0.12, 0.03, P.accent, 0, 0.0, 0.49);
+  box(g, 0.046, 0.025, 0.12, P.grey, 0, 0.066, 0.36);                  // cheek riser
+  // folded bipod
+  for (const sd of [-1, 1]) box(g, 0.01, 0.01, 0.2, P.metal, sd * 0.022, -0.02, -0.55);
+  // bolt (pivots around the bore axis, slides back)
+  const bolt = new THREE.Group(); bolt.position.set(0, 0.04, 0.1); g.add(bolt);
+  box(bolt, 0.055, 0.012, 0.012, P.grey, 0.04, 0, 0);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), P.accent); knob.position.set(0.07, -0.004, 0.0); bolt.add(knob);
+  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.03, -1.05); g.add(muzzle);
+  const eject = new THREE.Object3D(); eject.position.set(0.04, 0.05, 0.02); g.add(eject);
+  const right = new THREE.Group(); g.add(right);
+  box(right, 0.062, 0.075, 0.075, P.glove, 0.002, -0.085, 0.105, -0.3);
+  arm(right, P, [0.01, -0.11, 0.14], [0.07, -0.22, 0.46]);
+  const left = new THREE.Group(); g.add(left);
+  box(left, 0.07, 0.05, 0.08, P.glove, 0, -0.025, -0.4);
+  arm(left, P, [-0.02, -0.05, -0.4], [-0.16, -0.21, -0.14]);
+  return {
+    g, muzzle, eject, mag, charge: null, slide: null, left, bolt,
+    hip: new THREE.Vector3(0.15, -0.13, -0.36), ads: new THREE.Vector3(0, -0.0736, -0.24), scale: 0.64,
+  };
+}
+
 // ------------------------------------------------------------------ pistol
 function buildPistol(P) {
   const g = new THREE.Group();
@@ -199,7 +252,7 @@ export class ViewModel {
     const rim = new THREE.DirectionalLight('#9fd0ff', 1.0); rim.position.set(-1.5, 0.5, -1); this.scene.add(rim);
     const P = palette(accent);
     this.holder = new THREE.Group(); this.scene.add(this.holder);
-    this.models = { rifle: buildRifle(P), pistol: buildPistol(P), knife: buildKnife(P) };
+    this.models = { rifle: buildRifle(P), sniper: buildSniper(P), pistol: buildPistol(P), knife: buildKnife(P) };
     for (const k in this.models) {
       const m = this.models[k];
       m.g.visible = false; m.g.scale.setScalar(m.scale); this.holder.add(m.g);
@@ -207,6 +260,7 @@ export class ViewModel {
       if (m.left) m.leftHome = m.left.position.clone();
       if (m.slide) m.slideHome = m.slide.position.clone();
       if (m.charge) m.chargeHome = m.charge.position.clone();
+      if (m.bolt) m.boltHome = m.bolt.position.clone();
     }
     this.current = 'rifle'; this.models.rifle.g.visible = true;
     this.posSpring = new Spring(170, 0.6); this.rotSpring = new Spring(140, 0.55);
@@ -246,19 +300,20 @@ export class ViewModel {
       if (m.left) m.left.position.copy(m.leftHome);
       if (m.slide) m.slide.position.copy(m.slideHome);
       if (m.charge) m.charge.position.copy(m.chargeHome);
+      if (m.bolt) { m.bolt.position.copy(m.boltHome); m.bolt.rotation.set(0, 0, 0); }
     }
   }
 
   _start(action, dur) { this.action = action; this.actionT = 0; this.actionDur = dur; }
 
   fire(weapon) {
-    const pistol = weapon === 'pistol';
+    const pistol = weapon === 'pistol', sniper = weapon === 'sniper';
     const adsK = 1 - this.ads * 0.55;
-    this.posSpring.kick((Math.random() - 0.5) * 0.06 * adsK, (pistol ? 0.25 : 0.12) * adsK, (pistol ? 0.9 : 0.7) * adsK);
-    this.rotSpring.kick((pistol ? 6 : 2.6) * adsK, (Math.random() - 0.5) * 1.2 * adsK, (Math.random() - 0.5) * 1.6 * adsK);
-    this.flashT = 0.045;
+    this.posSpring.kick((Math.random() - 0.5) * 0.06 * adsK, (pistol ? 0.25 : sniper ? 0.4 : 0.12) * adsK, (pistol ? 0.9 : sniper ? 1.6 : 0.7) * adsK);
+    this.rotSpring.kick((pistol ? 6 : sniper ? 9 : 2.6) * adsK, (Math.random() - 0.5) * 1.2 * adsK, (Math.random() - 0.5) * 1.6 * adsK);
+    this.flashT = sniper ? 0.06 : 0.045;
     if (pistol) this.slideKick = 0.06;
-    this._ejectShell();
+    if (!sniper) this._ejectShell();
   }
 
   _ejectShell() {
@@ -272,6 +327,7 @@ export class ViewModel {
   }
 
   startReload(dur) { if (this.current !== 'knife') this._start('reload', dur); }
+  bolt(dur) { if (this.current === 'sniper') this._start('bolt', dur); }
   cancelReload() { if (this.action === 'reload') { this.action = null; this._resetParts(); } }
   slash() { this._start('slash', 0.42); }
   quickKnife() { this._show('knife'); this._start('quick', 0.5); }
@@ -318,6 +374,14 @@ export class ViewModel {
         pos.y -= (1 - e) * 0.22; rx -= (1 - e) * 0.9; rz += (1 - e) * 0.3;
       } else if (this.action === 'reload') {
         this._reloadAnim(id, m, k, pos, (a, b, c) => { rx += a; ry += b; rz += c; });
+      } else if (this.action === 'bolt' && m.bolt) {
+        const up = smooth(0.12, 0.3, k) * (1 - smooth(0.78, 0.94, k));
+        const back = smooth(0.3, 0.5, k) * (1 - smooth(0.56, 0.76, k));
+        m.bolt.rotation.z = up * 1.15;
+        m.bolt.position.z = m.boltHome.z + back * 0.09;
+        rz += up * 0.12; rx += back * 0.04; pos.y -= up * 0.012;
+        if (k > 0.5 && !this._shellOut) { this._shellOut = true; this._ejectShell(); }
+        if (k < 0.5) this._shellOut = false;
       } else if (this.action === 'slash' || this.action === 'quick') {
         const wind = smooth(0, 0.18, k), swing = smooth(0.18, 0.42, k), back = smooth(0.6, 1, k);
         const s = swing - back * swing;
@@ -376,6 +440,16 @@ export class ViewModel {
       const pull = smooth(0.74, 0.8, k) * (1 - smooth(0.8, 0.86, k));
       m.charge.position.z = m.chargeHome.z + pull * 0.07;
       rot(pull * -0.05, 0, pull * 0.08);
+    } else if (id === 'sniper') {
+      pos.y -= tilt * 0.03; rot(tilt * 0.1, tilt * 0.12, tilt * 0.4);
+      const drop = smooth(0.12, 0.3, k), insert = smooth(0.42, 0.66, k);
+      m.mag.visible = !(k > 0.3 && k < 0.42);
+      if (k < 0.36) m.mag.position.set(m.magHome.x, m.magHome.y - drop * 0.35, m.magHome.z);
+      else m.mag.position.set(m.magHome.x, m.magHome.y - (1 - insert) * 0.28, m.magHome.z);
+      const hand = smooth(0.16, 0.3, k) * (1 - smooth(0.42, 0.64, k));
+      m.left.position.set(m.leftHome.x, m.leftHome.y - hand * 0.3, m.leftHome.z + hand * 0.25);
+      const up = smooth(0.7, 0.76, k) * (1 - smooth(0.86, 0.92, k)), back = smooth(0.76, 0.8, k) * (1 - smooth(0.82, 0.86, k));
+      m.bolt.rotation.z = up * 1.15; m.bolt.position.z = m.boltHome.z + back * 0.09;
     } else if (id === 'pistol') {
       pos.y -= tilt * 0.02; rot(tilt * 0.2, tilt * 0.1, tilt * 0.35);
       const drop = smooth(0.1, 0.3, k), insert = smooth(0.38, 0.7, k);

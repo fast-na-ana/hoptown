@@ -9,10 +9,10 @@ export const DIFFICULTIES = ['easy', 'medium', 'hard', 'legendary'];
 const DIFF = {
   // react: seconds before first shot · err: initial aim error · turn: rad/s · cone: fire when within
   // head: chance to aim for the head · spread: multiplier on weapon spread · pause: gaps between bursts
-  easy:      { react: 0.85, err: 0.16, turn: 2.4, cone: 0.06, head: 0.05, view: 38, strafe: 0.45, nade: 0.03, spread: 3.2, burst: 0.35, pause: 0.7, decay: 1.2 },
-  medium:    { react: 0.55, err: 0.1, turn: 3.6, cone: 0.05, head: 0.12, view: 52, strafe: 0.7, nade: 0.07, spread: 2.2, burst: 0.5, pause: 0.45, decay: 1.6 },
-  hard:      { react: 0.34, err: 0.06, turn: 5.5, cone: 0.04, head: 0.28, view: 68, strafe: 0.9, nade: 0.12, spread: 1.5, burst: 0.8, pause: 0.25, decay: 2.2 },
-  legendary: { react: 0.2, err: 0.035, turn: 9, cone: 0.035, head: 0.5, view: 85, strafe: 1, nade: 0.2, spread: 1.0, burst: 1.5, pause: 0.12, decay: 3 },
+  easy:      { snipe: 0.03, react: 0.85, err: 0.16, turn: 2.4, cone: 0.06, head: 0.05, view: 38, strafe: 0.45, nade: 0.03, spread: 3.2, burst: 0.35, pause: 0.7, decay: 1.2 },
+  medium:    { snipe: 0.018, react: 0.55, err: 0.1, turn: 3.6, cone: 0.05, head: 0.12, view: 52, strafe: 0.7, nade: 0.07, spread: 2.2, burst: 0.5, pause: 0.45, decay: 1.6 },
+  hard:      { snipe: 0.01, react: 0.34, err: 0.06, turn: 5.5, cone: 0.04, head: 0.28, view: 68, strafe: 0.9, nade: 0.12, spread: 1.5, burst: 0.8, pause: 0.25, decay: 2.2 },
+  legendary: { snipe: 0.005, react: 0.2, err: 0.035, turn: 9, cone: 0.035, head: 0.5, view: 85, strafe: 1, nade: 0.2, spread: 1.0, burst: 1.5, pause: 0.12, decay: 3 },
 };
 DIFF.normal = DIFF.medium;
 
@@ -21,7 +21,7 @@ function angDiff(a, b) { let d = a - b; while (d > Math.PI) d -= Math.PI * 2; wh
 export class Bot {
   constructor(game, p, difficulty = 'normal') {
     this.g = game; this.p = p; this.d = DIFF[difficulty] || DIFF.medium;
-    this.burstT = 0; this.pauseT = 0;
+    this.burstT = 0; this.pauseT = 0; this.role = 'rifle';
     this.path = []; this.pi = 0; this.target = null; this.lastSeen = null; this.lastSeenT = -99;
     this.reactUntil = 0; this.strafe = 1; this.strafeT = 0; this.err = [0, 0];
     this.nextThink = 0; this.stuckT = 0; this.checkPos = [0, 0, 0]; this.checkT = 0;
@@ -181,8 +181,10 @@ export class Bot {
         if (Math.random() < 0.003 * this.d.strafe && ms.onGround) this.crouchHold = 0.5; // slide
       }
       // weapon logic
-      if (p.mag[p.weapon] === 0 && p.weapon === 'rifle' && dist < 12 && g.time < p.reloadUntil) g.switchWeapon(p, 'pistol');
-      if (p.weapon === 'pistol' && p.mag.pistol === 0) g.switchWeapon(p, 'rifle');
+      const primary = this.role === 'sniper' && dist > 12 ? 'sniper' : 'rifle';
+      if (p.weapon !== 'pistol' && p.weapon !== primary && g.time >= p.reloadUntil) g.switchWeapon(p, primary);
+      if (p.mag[p.weapon] === 0 && p.weapon !== 'pistol' && dist < 12 && g.time < p.reloadUntil) g.switchWeapon(p, 'pistol');
+      if (p.weapon === 'pistol' && p.mag.pistol === 0) g.switchWeapon(p, primary);
       const yawErr = Math.abs(angDiff(p.yaw, desiredYaw - this.err[0]));
       const pitchErr = Math.abs(p.pitch - (desiredPitch - this.err[1]));
       const cone = this.d.cone + 0.4 / Math.max(3, dist);
@@ -193,11 +195,11 @@ export class Bot {
         g.melee(p, Math.atan2(-dx, -dz), Math.atan2(dy, dh));
       } else if (g.time > this.reactUntil && this.pauseT <= 0 && yawErr < cone && pitchErr < cone && g.match.phase === 'play' && g.canShoot(p)) {
         const W = WEAPONS[p.weapon];
-        if (W.auto || Math.random() < 0.3) {
+        const settled = !W.scope || (g.time > this.reactUntil + 0.35 && yawErr < cone * 0.5);
+        if ((W.auto || Math.random() < 0.3) && settled) {
           const eyeNow = g.eyeOf(p);
-          p.spreadMul = this.d.spread;
-          g.fire(p, p.yaw, p.pitch, 0.2, eyeNow);
-          p.spreadMul = 1;
+          if (W.scope) { p.spreadAdd = this.d.snipe; g.fire(p, p.yaw, p.pitch, 1, eyeNow); p.spreadAdd = 0; }
+          else { p.spreadMul = this.d.spread; g.fire(p, p.yaw, p.pitch, 0.2, eyeNow); p.spreadMul = 1; }
           p.pitch += W.recoilPitch * 0.5;
         }
       }
