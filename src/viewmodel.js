@@ -24,8 +24,8 @@ function buildRifle(accent) {
   const skin = m('#4a505c', { metalness: 0 }), glove = m(accent, { metalness: 0 });
   b(g, 0.09, 0.08, 0.12, glove, 0.0, -0.09, 0.07);
   b(g, 0.09, 0.07, 0.12, glove, 0.0, -0.05, -0.4);
-  b(g, 0.075, 0.075, 0.34, skin, 0.05, -0.13, 0.27).rotation.x = 0.35;
-  b(g, 0.075, 0.075, 0.34, skin, -0.09, -0.11, -0.22).rotation.set(0.25, 0.45, 0);
+  b(g, 0.07, 0.07, 0.26, skin, 0.04, -0.13, 0.24).rotation.x = 0.4;
+  b(g, 0.065, 0.065, 0.2, skin, -0.07, -0.1, -0.33).rotation.set(0.3, 0.6, 0);
   return { g, muzzle, mag: g.children[4], hipPos: new THREE.Vector3(0.15, -0.14, -0.33), adsPos: new THREE.Vector3(0, -0.062, -0.25) };
 }
 

@@ -1,0 +1,24 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({executablePath:'/usr/bin/google-chrome',headless:'new',args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const p = await b.newPage(); await p.setViewport({width:1280,height:720});
+p.on('pageerror', e => console.log('pageerror', e.message));
+await p.goto('http://localhost:8123/index.html?test', {waitUntil:'load'});
+await p.evaluate(() => { document.getElementById('bots').value = 3; window.__start('offline'); });
+await p.evaluate(async () => {
+  const g = window.__hoptown.game; g.forceInput = true;
+  const wait = async (sec) => { const t0 = g.time; while (g.time - t0 < sec) await new Promise(r=>setTimeout(r,16)); };
+  await wait(0.5);
+  const bot = g.bots[0]; bot.think = () => {}; bot.step = () => {};
+  bot.p.ms.pos = [2, 0, 9]; bot.p.yaw = Math.PI * 0.85;
+  g.bots[1].think = () => {}; g.bots[1].step = () => {}; g.bots[1].p.ms.pos = [-4, 0, 13]; g.bots[1].p.yaw = 2.5; g.bots[1].p.ms.crouching = true;
+  g.local.ms.pos = [0, 0, 16]; g.view.yaw = 0.15; g.view.pitch = -0.05;
+  await wait(0.4);
+});
+await p.screenshot({path:'test/shots/bots.png'});
+await p.evaluate(() => { window.__hoptown.game.input.keys.add('Tab'); });
+await new Promise(r=>setTimeout(r,400));
+await p.screenshot({path:'test/shots/scoreboard.png'});
+await p.evaluate(() => { const g = window.__hoptown.game; g.input.keys.delete('Tab'); g.local.ms.pos = [-12, 6.5, -15.5]; g.view.yaw = Math.PI - 0.3; g.view.pitch = -0.25; });
+await new Promise(r=>setTimeout(r,600));
+await p.screenshot({path:'test/shots/roof.png'});
+await b.close();
