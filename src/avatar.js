@@ -1,5 +1,8 @@
 // Original blocky "hop-bot" character with a procedural, direction-aware animation rig.
 import * as THREE from 'three';
+import { mergeByMaterial, bakeVertexColors } from './merge.js';
+
+const VC_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.65, metalness: 0.1 });
 
 const shared = {};
 function mat(color, emissive, extra = {}) {
@@ -95,6 +98,12 @@ export class Avatar {
     this.tag = makeNameTag(name, color);
     this.tag.position.y = 2.2;
     this.root.add(this.tag);
+
+    // collapse ~45 boxes into one mesh per animated part (big draw-call saving)
+    bakeVertexColors(this.root, VC_MAT, o => o.material.emissiveIntensity > 0 || o.material.metalness > 0.5);
+    mergeByMaterial(this.root);
+    const shadowParts = new Set([this.hips, this.torso, this.head, ...this.legs.flatMap(l => [l.th, l.kn])]);
+    this.root.traverse(o => { if (o.isMesh) o.castShadow = shadowParts.has(o.parent) && o.material === VC_MAT; });
 
     this.phase = 0;
     this.pose = Object.fromEntries(POSE_KEYS.map(k => [k, 0]));

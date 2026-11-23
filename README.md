@@ -34,3 +34,11 @@ npm run serve   # http://localhost:8123
 Add `?local=1` to the URL to test multiplayer between tabs of the same browser without WebRTC.
 
 Fonts: Archivo and Space Mono (SIL Open Font License), self-hosted in `fonts/`.
+
+## Rooms
+- **Host tools:** pause with Esc and the player list appears. The host can send a player to the **AFK box**, a sealed glass room above the map where nobody can shoot or be shot, or **kick** them.
+- **AFK:** in an online room, a player who sends no input for 60 seconds is moved to the AFK box automatically. Press **Enter** to rejoin.
+
+## Performance
+- **Settings → Graphics quality:** Low turns shadows off and lowers resolution. Medium is the default. High sharpens shadows and resolution.
+- **Settings → Show FPS:** shows frame rate and the worst frame time.

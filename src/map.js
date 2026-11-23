@@ -2,11 +2,12 @@
 // diagonally across a street, garages, a delivery truck as centre cover, rooftop jump pads.
 import * as THREE from 'three';
 import { makeTextures } from './textures.js';
+import { mergeByMaterial } from './merge.js';
 
 const RANK = {
   grass: 0, asphalt: 1, concrete: 2, wood: 2, roof: 2, interior: 3, fence: 3, hedge: 3, trunk: 3, metal: 3,
   truckRed: 3, carBlue: 3, carYellow: 3, crate: 3, sidingA: 4, sidingB: 4, brick: 4, dark: 5, white: 5,
-  trim: 6, orange: 6, lamp: 6, pad: 6, glass: 7,
+  trim: 6, orange: 6, lamp: 6, pad: 6, glass: 7, afkglass: 7,
 };
 const F1 = 0.15;   // ground floor top
 const F2 = 3.35;   // second floor top
@@ -79,6 +80,7 @@ export function buildMap(world, scene) {
     carBlue: { color: '#3d7be0' },
     carYellow: { color: '#f2c230' },
     glass: { color: '#9fd6ff', emissive: '#1d3d55' },
+    afkglass: { color: '#dff4ff' },
     pad: { color: '#3ff2ff', emissive: '#18c8e0' },
     trunk: { color: '#7a5233' },
     lamp: { color: '#fff4c2', emissive: '#ffe28a' },
@@ -284,6 +286,16 @@ export function buildMap(world, scene) {
     B.box([x - 1.2, 0, z - 0.35], [x + 1.2, 1.0, z + 0.35], 'concrete');
     B.visual([x - 1.2, 1.0, z - 0.2], [x + 1.2, 1.1, z + 0.2], 'orange');
   }
+  // ---------- AFK box: a sealed glass room high above the court ----------
+  B.rot = 0;
+  const AY = 30;
+  B.box([-4.3, AY - 0.3, -4.3], [4.3, AY, 4.3], 'concrete');                 // floor
+  for (const [mn, mx] of [[[-4.3, AY, -4.3], [4.3, AY + 3.4, -4.0]], [[-4.3, AY, 4.0], [4.3, AY + 3.4, 4.3]],
+    [[-4.3, AY, -4.0], [-4.0, AY + 3.4, 4.0]], [[4.0, AY, -4.0], [4.3, AY + 3.4, 4.0]]]) B.box(mn, mx, 'afkglass');
+  B.box([-4.3, AY + 3.4, -4.3], [4.3, AY + 3.6, 4.3], 'afkglass');         // ceiling
+  for (const x of [-4.3, 4.0]) for (const z of [-4.3, 4.0]) B.box([x, AY, z], [x + 0.3, AY + 3.6, z + 0.3], 'dark'); // corner posts
+  B.box([-3.6, AY, 2.6], [3.6, AY + 0.5, 3.6], 'wood');                     // bench
+  B.box([-1.2, AY, -1.2], [1.2, AY + 0.02, 1.2], 'orange');                 // AFK mat
   // street-side mailboxes for small cover
   B.rot = 0;
 
@@ -298,12 +310,13 @@ export function buildMap(world, scene) {
       metalness: name === 'metal' ? 0.15 : 0, emissive: m.emissive || '#000000', emissiveIntensity: m.emissive ? 0.8 : 0,
     });
     if (name === 'glass') { mat.transparent = true; mat.opacity = 0.75; }
+    if (name === 'afkglass') { mat.transparent = true; mat.opacity = 0.16; mat.roughness = 0.1; mat.depthWrite = false; }
     // Every material sits on its own depth layer, so coplanar faces of different
     // materials never fight: the higher rank always wins.
     const rank = RANK[name] ?? 3;
     if (rank > 0) { mat.polygonOffset = true; mat.polygonOffsetFactor = -0.5 * rank; mat.polygonOffsetUnits = -2 * rank; }
     const mesh = new THREE.Mesh(bk.toGeometry(), mat);
-    mesh.castShadow = name !== 'grass' && name !== 'asphalt' && name !== 'glass';
+    mesh.castShadow = name !== 'grass' && name !== 'asphalt' && name !== 'glass' && name !== 'afkglass';
     mesh.receiveShadow = true;
     mesh.name = 'map-' + name;
     group.add(mesh);
@@ -324,11 +337,12 @@ export function buildMap(world, scene) {
   const padRings = [];
   for (const p of world.pads) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.05, 6, 24), ringMat);
-    ring.rotation.x = Math.PI / 2;
+    ring.rotation.x = Math.PI / 2; ring.userData.keep = true;
     ring.position.set((p.min[0] + p.max[0]) / 2, 0.3, (p.min[2] + p.max[2]) / 2);
     group.add(ring);
     padRings.push(ring);
   }
+  mergeByMaterial(group);
   scene.add(group);
 
   // ---------- spawns + bot navigation ----------
@@ -399,5 +413,6 @@ export function buildMap(world, scene) {
   // pad is enterable from the backyard
   for (const pre of ['a', 'b']) for (const k of ['_back_m', '_back_w', '_back_e']) link(index[pre + k], index[pre + '_pad']);
 
-  return { group, spawns, nav: { nodes, index }, padRings, bounds: { minY: -15 } };
+  const afkSpawns = [[-2.5, 30, -2.5], [2.5, 30, -2.5], [-2.5, 30, 1], [2.5, 30, 1], [0, 30, -1.5], [0, 30, 1.2]];
+  return { group, spawns, afkSpawns, nav: { nodes, index }, padRings, bounds: { minY: -15 } };
 }

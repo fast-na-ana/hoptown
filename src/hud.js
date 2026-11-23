@@ -64,6 +64,12 @@ export class Hud {
   }
   show(v) { this.el.style.display = v ? 'block' : 'none'; }
 
+  _cls(el, cls, on) {
+    const key = (el.id || el) + '.' + cls;
+    if (this._cache[key] === on) return;
+    this._cache[key] = on; el.classList.toggle(cls, on);
+  }
+
   _set(id, prop, val) {
     const key = id + prop;
     if (this._cache[key] === val) return false;
@@ -77,7 +83,7 @@ export class Hud {
     const h = Math.max(0, Math.ceil(hp));
     this._set('hp-num', 'text', String(h));
     this._set('hp-fill', 'width', Math.max(0, hp / max * 100) + '%');
-    this._set('hp-fill', 'background', hp > 60 ? 'linear-gradient(90deg,#55e08a,#9cf2a6)' : hp > 30 ? 'linear-gradient(90deg,#ffb020,#ffd76a)' : 'linear-gradient(90deg,#ff3b4a,#ff7b6b)');
+    this._set('hp-fill', 'background', hp > 60 ? '#2bd66a' : hp > 30 ? '#ffd60a' : '#ff4a3d');
     this._set('speed', 'text', (Math.round(speed * 10) / 10).toFixed(1));
   }
 
@@ -86,37 +92,29 @@ export class Hud {
     if (id === 'knife') this._set('ammo', 'html', '<span class="inf">MELEE</span>');
     else if (reloading) this._set('ammo', 'html', `<span class="reload">RELOADING<i style="width:${Math.round(reloadPct * 100)}%"></i></span>`);
     else this._set('ammo', 'html', `<b class="${mag <= Math.ceil(magMax * 0.25) ? 'low' : ''}">${mag}</b><span class="max">/ ${magMax}</span>`);
-    for (const w of ['rifle', 'sniper', 'pistol', 'knife']) {
-      const el = $('slot-' + w);
-      el.classList.toggle('on', w === id);
-    }
+    for (const w of ['rifle', 'sniper', 'pistol', 'knife']) this._cls($('slot-' + w), 'on', w === id);
   }
 
   setAbilities(a) {
     // grenades
     const n = $('ab-nade');
-    n.classList.toggle('ready', a.nades > 0);
-    n.classList.toggle('empty', a.nades === 0);
-    n.style.setProperty('--p', (a.nades < a.nadeMax ? a.nadePct * 100 : 0) + '%');
+    this._cls(n, 'ready', a.nades > 0); this._cls(n, 'empty', a.nades === 0);
+    this._set('ab-nade', '--p', (a.nades < a.nadeMax ? Math.round(a.nadePct * 100) : 0) + '%');
     this._set('ab-nade-pips', 'html', Array.from({ length: a.nadeMax }, (_, i) => `<i class="${i < a.nades ? 'on' : ''}"></i>`).join(''));
     this._set('ab-nade-sub', 'text', a.nades > 0 ? `${a.nades} ready` : `recharging ${Math.ceil(a.nadeLeft)}s`);
     // blink
     const b = $('ab-blink');
-    b.classList.toggle('ready', a.blink === 'ready');
-    b.classList.toggle('active', a.blink === 'active');
-    b.classList.toggle('empty', a.blink === 'cooldown');
-    b.style.setProperty('--p', (a.blink === 'cooldown' ? a.blinkPct * 100 : 0) + '%');
+    this._cls(b, 'ready', a.blink === 'ready'); this._cls(b, 'active', a.blink === 'active'); this._cls(b, 'empty', a.blink === 'cooldown');
+    this._set('ab-blink', '--p', (a.blink === 'cooldown' ? Math.round(a.blinkPct * 100) : 0) + '%');
     this._set('ab-blink-sub', 'text', a.blink === 'active' ? 'Q again: WARP!' : a.blink === 'cooldown' ? `cooldown ${Math.ceil(a.blinkCd)}s` : 'throw · Q again warps');
     // knife
     const m = $('ab-melee');
-    m.classList.toggle('ready', a.knifeReady);
-    m.classList.toggle('empty', !a.knifeReady);
+    this._cls(m, 'ready', a.knifeReady); this._cls(m, 'empty', !a.knifeReady);
   }
 
   setScope(on, cycling) {
     const el = $('scope');
-    if (el.classList.contains('on') !== on) el.classList.toggle('on', on);
-    el.classList.toggle('cycling', !!cycling);
+    this._cls(el, 'on', on); this._cls(el, 'cycling', !!cycling);
   }
 
   setLowHealth(on, hp) {
@@ -125,14 +123,14 @@ export class Hud {
       el.classList.toggle('on', on);
       if (on) for (const s of el.querySelectorAll('.splat')) s.style.transform = `rotate(${Math.random() * 360}deg) scale(${0.8 + Math.random() * 0.5})`;
     }
-    if (on) el.style.setProperty('--hp', Math.max(0, hp / 20).toFixed(2));
+
   }
 
   setCrosshair(spread, visible, knife) {
-    const gap = 4 + spread * 900;
-    this.cross.style.setProperty('--gap', gap.toFixed(1) + 'px');
-    this.cross.style.opacity = visible ? 1 : 0;
-    this.cross.classList.toggle('knife', !!knife);
+    const gap = Math.round(4 + spread * 900);
+    this._set('crosshair', '--gap', gap + 'px');
+    this._set('crosshair', 'opacity', visible ? '1' : '0');
+    this._cls(this.cross, 'knife', !!knife);
   }
 
   hitmarker(head, kill) {
@@ -140,7 +138,7 @@ export class Hud {
     this.hitT = kill ? 0.35 : 0.16;
   }
 
-  setMatch({ timeLeft, round, phase, myKills, killLimit, rank, total, leaderName, leaderKills, leaderColor, roomCode, players, isHost }) {
+  setMatch({ timeLeft, round, phase, myKills, killLimit, rank, total, leaderName, leaderKills, leaderColor, roomCode, players, isHost, bots, difficulty }) {
     const m = Math.max(0, Math.floor(timeLeft / 60)), s = Math.max(0, Math.floor(timeLeft % 60));
     this._set('m-round', 'text', `ROUND ${round}`);
     this._set('m-phase', 'text', phase === 'warmup' ? 'GET READY' : phase === 'end' ? 'ROUND OVER' : 'FREE FOR ALL');
@@ -150,8 +148,9 @@ export class Hud {
     this._set('m-bar', 'width', Math.min(100, myKills / killLimit * 100) + '%');
     this._set('m-rank', 'html', `<b>#${rank}</b> of ${total}`);
     this._set('m-leader', 'html', leaderName ? `<span class="dot" style="background:${leaderColor}"></span>${esc(leaderName)} <b>${leaderKills}</b>` : '<i>you lead</i>');
-    this._set('room-pill', 'html', roomCode ? `<span class="live"></span>ROOM <b>${esc(roomCode)}</b> · ${players} player${players === 1 ? '' : 's'}${isHost ? ' · host' : ''}` : '');
-    $('room-pill').style.display = roomCode ? '' : 'none';
+    this._set('room-pill', 'html', roomCode
+      ? `<span class="live"></span><b>ONLINE</b> ROOM ${esc(roomCode)} · ${players} PLAYER${players === 1 ? '' : 'S'}${isHost ? ' · HOST' : ''}`
+      : `<span class="off"></span><b>OFFLINE</b> ${bots} BOT${bots === 1 ? '' : 'S'} · ${String(difficulty).toUpperCase()}`);
   }
 
   setStreak(n) {
@@ -171,10 +170,10 @@ export class Hud {
   addFeed(killer, kcolor, victim, vcolor, weapon, head) {
     const row = document.createElement('div');
     row.className = 'feed-row';
-    const icon = ICONS[weapon === 'grenade' ? 'grenade' : weapon] || (weapon === 'fall' ? '<span>↓</span>' : ICONS.rifle);
+    const icon = ICONS[weapon] || (weapon === 'fall' ? '<span>FALL</span>' : ICONS.rifle);
     row.innerHTML = killer
-      ? `<b style="color:${kcolor}">${esc(killer)}</b><span class="w">${icon}${head ? '<em>HS</em>' : ''}</span><b style="color:${vcolor}">${esc(victim)}</b>`
-      : `<span class="w">${icon}</span><b style="color:${vcolor}">${esc(victim)}</b>`;
+      ? `<i class="dot" style="background:${kcolor}"></i><b>${esc(killer)}</b><span class="w">${icon}${head ? '<em>HS</em>' : ''}</span><i class="dot" style="background:${vcolor}"></i><b>${esc(victim)}</b>`
+      : `<span class="w">${icon}</span><i class="dot" style="background:${vcolor}"></i><b>${esc(victim)}</b>`;
     this.feed.prepend(row);
     while (this.feed.children.length > 6) this.feed.lastChild.remove();
     setTimeout(() => row.classList.add('fade'), 5000);
@@ -182,7 +181,7 @@ export class Hud {
   }
   feedText(text, color = '#fff') {
     const row = document.createElement('div');
-    row.className = 'feed-row info'; row.innerHTML = `<span style="color:${color}">${esc(text)}</span>`;
+    row.className = 'feed-row info'; row.innerHTML = `<i class="dot" style="background:${color}"></i><span>${esc(text)}</span>`;
     this.feed.prepend(row);
     setTimeout(() => row.classList.add('fade'), 4200);
     setTimeout(() => row.remove(), 5000);
@@ -216,7 +215,8 @@ export class Hud {
     if (el.textContent !== (text || '')) { el.textContent = text || ''; if (text) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); } }
     el.style.display = text ? 'block' : 'none';
   }
-  help(show) { $('help').classList.toggle('show', show); }
+  help(show) { this._cls($('help'), 'show', show); }
+  setAfk(on) { this._cls($('afk-banner'), 'on', on); this._cls($('abilities'), 'off', on); this._cls($('weapon'), 'off', on); }
   scoreboard(show, rows, title = 'SCOREBOARD', footer = '') {
     const el = $('scoreboard');
     el.style.display = show ? 'flex' : 'none';
@@ -224,7 +224,7 @@ export class Hud {
     this._set('sb-title', 'text', title);
     this._set('sb-footer', 'text', footer);
     this._set('sb-body', 'html', rows.map((r, i) => `<tr class="${r.me ? 'me' : ''}">
-      <td class="rk">${i + 1}</td><td><span class="dot" style="background:${r.color}"></span>${esc(r.name)}${r.bot ? ' <i class="tagbot">BOT</i>' : ''}</td>
+      <td class="rk">${i + 1}</td><td><span class="dot" style="background:${r.color}"></span>${esc(r.name)}${r.bot ? ' <i class="tagbot">BOT</i>' : ''}${r.host ? ' <i class="tagbot host">HOST</i>' : ''}${r.afk ? ' <i class="tagbot afk">AFK</i>' : ''}</td>
       <td>${r.score}</td><td>${r.kills}</td><td>${r.deaths}</td><td>${r.best}</td><td>${r.wins}</td><td class="ping">${r.ping ?? ''}</td></tr>`).join(''));
   }
   update(dt) {

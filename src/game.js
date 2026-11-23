@@ -35,6 +35,7 @@ export class Game {
     this.view = { yaw: 0, pitch: 0, recoil: 0, recoilYaw: 0, shake: 0, land: 0, roll: 0, fovKick: 0, ads: 0, step: 0 };
     this.match = { phase: 'warmup', t: MATCH.warmup, round: 1, winner: null, killLimit: MATCH.killLimit, roundTime: MATCH.roundTime };
     this.lastMatchSend = 0; this.lastStateSend = 0; this.lastRosterSend = 0;
+    this.kicked = new Set();
     this.paused = false;
 
     this._setupScene();
@@ -48,6 +49,29 @@ export class Game {
     this.spawn(this.local);
     if (this.net) this._setupNet(); else this._ensureBots();
     this.onResize();
+    this._prewarm();
+  }
+
+  // Compile every shader and upload every texture now, so the first shot, explosion,
+  // blink or scope-in doesn't hitch mid-fight.
+  _prewarm() {
+    try {
+      this.effects.setWarm(true);
+      const far = [0, -40, 0];
+      const a = this.spawnProjectile({ id: 'warm1', kind: 'nade', owner: 'x', pos: far, vel: [0, 0, 0], fuse: 0, auth: false });
+      const b = this.spawnProjectile({ id: 'warm2', kind: 'blink', owner: 'x', pos: far, vel: [0, 0, 0], fuse: 0, auth: false, color: this.local.color });
+      const vis = {};
+      for (const k in this.vm.models) { vis[k] = this.vm.models[k].g.visible; this.vm.models[k].g.visible = true; }
+      this.vm.flashSprite.visible = true;
+      this.renderer.compile(this.scene, this.camera);
+      this.renderer.compile(this.vm.scene, this.vm.camera);
+      this.render();
+      for (const k in this.vm.models) this.vm.models[k].g.visible = vis[k];
+      this.vm.flashSprite.visible = false;
+      this.effects.setWarm(false);
+      a.dead = true; b.dead = true;
+      for (const pr of [a, b]) { this.scene.remove(pr.mesh); this.projectiles.splice(this.projectiles.indexOf(pr), 1); }
+    } catch (e) { console.warn('prewarm', e); }
   }
 
   get isHost() { return this.hostId === this.selfId; }
@@ -70,8 +94,9 @@ export class Game {
     scene.add(new THREE.HemisphereLight('#d9ecff', '#6b8f4e', 1.25));
     const sun = new THREE.DirectionalLight('#fff3dc', 2.4);
     sun.position.set(28, 44, 22);
-    sun.castShadow = this.settings.shadows !== false;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.castShadow = (this.settings.quality || 'medium') !== 'low';
+    const sm = this.settings.quality === 'high' ? 2048 : 1024;
+    sun.shadow.mapSize.set(sm, sm);
     const sc = sun.shadow.camera; sc.left = -42; sc.right = 42; sc.top = 42; sc.bottom = -42; sc.near = 1; sc.far = 130;
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
     scene.add(sun); scene.add(sun.target);
@@ -95,7 +120,7 @@ export class Game {
       prevPos: [0, 0, 0], rpos: [0, -50, 0], rvel: [0, 0, 0], rc: false, rg: true, snaps: [],
       yaw: 0, pitch: 0, hp: PLAYER.maxHealth, alive: false, respawnAt: 0, protectUntil: 0,
       weapon: 'rifle', mag: { rifle: WEAPONS.rifle.mag, sniper: WEAPONS.sniper.mag, pistol: WEAPONS.pistol.mag }, reloadUntil: 0, nextShot: 0, bloom: 0,
-      nades: GRENADE.max, nadeT: 0, blinkCd: 0, blink: null, nextMelee: 0,
+      nades: GRENADE.max, nadeT: 0, blinkCd: 0, blink: null, nextMelee: 0, afk: false,
       kills: 0, deaths: 0, score: 0, streak: 0, best: 0, wins: 0, lastHurt: -99, lastSeen: now(), killedBy: null,
       avatar: null,
     };
@@ -126,8 +151,9 @@ export class Game {
   }
 
   spawn(p) {
-    const enemies = [...this.players.values()].filter(o => o !== p && o.alive);
-    const scored = this.map.spawns.map(s => {
+    const enemies = [...this.players.values()].filter(o => o !== p && o.alive && !o.afk);
+    const pool = p.afk ? this.map.afkSpawns : this.map.spawns;
+    const scored = pool.map(s => {
       let d = 60;
       for (const e of enemies) {
         const ep = this.posOf(e);
@@ -142,7 +168,7 @@ export class Game {
     p.ms.pos[0] = spot[0]; p.ms.pos[1] = spot[1]; p.ms.pos[2] = spot[2];
     p.ms.vel = [0, 0, 0]; p.ms.onGround = false; p.ms.sliding = false; p.ms.crouching = false; p.ms.height = PLAYER.height;
     p.prevPos = [...p.ms.pos];
-    p.hp = PLAYER.maxHealth; p.alive = true; p.protectUntil = this.time + PLAYER.spawnProtect;
+    p.hp = PLAYER.maxHealth; p.alive = true; p.protectUntil = p.afk ? Infinity : this.time + PLAYER.spawnProtect;
     p.mag.rifle = WEAPONS.rifle.mag; p.mag.sniper = WEAPONS.sniper.mag; p.mag.pistol = WEAPONS.pistol.mag; p.spray = 0; p.reloadUntil = 0; p.bloom = 0;
     p.nades = GRENADE.max; p.nadeT = 0; p.blinkCd = 0; p.blink = null; p.weapon = 'rifle';
     p.yaw = Math.atan2(spot[0], spot[2]); // face roughly toward the centre
@@ -217,7 +243,7 @@ export class Game {
     const wh = this.world.raycast(eye[0], eye[1], eye[2], d[0], d[1], d[2], 250);
     let bestT = wh ? wh.t : 250, target = null, head = false;
     for (const o of this.players.values()) {
-      if (o === p || !o.alive) continue;
+      if (o === p || !o.alive || o.afk) continue;
       const hb = this.hitboxes(o);
       const rh = rayBox(eye[0], eye[1], eye[2], d[0], d[1], d[2], hb.head[0], hb.head[1]);
       if (rh && rh.t < bestT) { bestT = rh.t; target = o; head = true; }
@@ -309,7 +335,7 @@ export class Game {
     const eye = this.eyeOf(p), d = this.forward(yaw, pitch);
     let best = null, bestD = Infinity;
     for (const o of this.players.values()) {
-      if (o === p || !o.alive) continue;
+      if (o === p || !o.alive || o.afk) continue;
       const op = this.posOf(o), h = this.crouchOf(o) ? PLAYER.crouchHeight : PLAYER.height;
       // closest point on the target's vertical segment to our eye
       const cy = Math.max(op[1] + 0.2, Math.min(op[1] + h - 0.1, eye[1]));
@@ -342,7 +368,8 @@ export class Game {
   }
 
   damage(target, amount, attackerId, weapon, head, fromPos) {
-    if (!target.alive || this.match.phase !== 'play') return;
+    if (!target.alive || target.afk || this.match.phase !== 'play') return;
+    const atk = this.players.get(attackerId); if (atk && atk.afk) return;
     if (this.time < target.protectUntil && attackerId !== target.id) return;
     target.hp -= amount; target.lastHurt = this.time;
     if (target.isLocal) {
@@ -440,11 +467,20 @@ export class Game {
   }
 
   spawnProjectile(pr) {
-    const geo = pr.kind === 'nade' ? new THREE.SphereGeometry(0.12, 10, 8) : new THREE.CylinderGeometry(0.2, 0.2, 0.05, 16);
-    const mat = pr.kind === 'nade'
-      ? new THREE.MeshStandardMaterial({ color: '#384a2c', roughness: 0.6, emissive: '#ff3b1f', emissiveIntensity: 0.25 })
-      : new THREE.MeshBasicMaterial({ color: pr.color || '#7ff8ff' });
-    pr.mesh = new THREE.Mesh(geo, mat);
+    if (!this._proj) {
+      this._proj = {
+        nadeGeo: new THREE.SphereGeometry(0.12, 10, 8), discGeo: new THREE.CylinderGeometry(0.2, 0.2, 0.05, 16),
+        nadeMat: new THREE.MeshStandardMaterial({ color: '#384a2c', roughness: 0.6, emissive: '#ff3b1f', emissiveIntensity: 0.25 }), discMats: new Map(),
+      };
+    }
+    const P = this._proj;
+    let mat = P.nadeMat;
+    if (pr.kind !== 'nade') {
+      const col = pr.color || '#7ff8ff';
+      if (!P.discMats.has(col)) P.discMats.set(col, new THREE.MeshBasicMaterial({ color: col }));
+      mat = P.discMats.get(col);
+    }
+    pr.mesh = new THREE.Mesh(pr.kind === 'nade' ? P.nadeGeo : P.discGeo, mat);
     pr.mesh.position.set(...pr.pos);
     pr.mesh.castShadow = true;
     this.scene.add(pr.mesh);
@@ -570,6 +606,39 @@ export class Game {
     this.net.send('match', { ph: this.match.phase, t: r2(this.match.t), r: this.match.round, w: this.match.winner, kl: this.match.killLimit, bc: this.botCount, df: this.difficulty });
   }
 
+  // ---------------------------------------------------------------- AFK box + kick
+  setAfk(id, on) {
+    const p = this.players.get(id);
+    if (!p || p.afk === on) return;
+    p.afk = on;
+    if (p.ms) this.spawn(p);              // owner teleports into / out of the box
+    if (on && p.blink) { p.blink.dead = true; p.blink = null; }
+    if (p.isLocal) {
+      if (on) this.hud.announce('AFK BOX', 'Press ENTER to rejoin the match');
+      else this.hud.announce('BACK IN!', 'Welcome back');
+    } else this.hud.feedText(`${p.name} ${on ? 'moved to the AFK box' : 'is back in the match'}`, on ? '#aaa' : p.color);
+  }
+
+  requestAfk(id, on) {
+    if (this.net) this.net.send('afk', { id, on: on ? 1 : 0 });
+    this.setAfk(id, on);
+  }
+
+  kickPlayer(id) {
+    if (!this.net || !this.isHost || id === this.selfId) return;
+    const p = this.players.get(id);
+    this.kicked.add(id);
+    this.net.send('kick', { id });
+    if (p) this.hud.feedText(`${p.name} was removed by the host`, '#ff6b6b');
+    for (const q of [...this.players.values()]) if (q.id === id || (q.isBot && q.owner === id)) this.removePlayer(q.id);
+  }
+
+  playerList() {
+    return [...this.players.values()].filter(p => !p.isBot).map(p => ({
+      id: p.id, name: p.name, color: p.color, me: p.isLocal, host: p.id === this.hostId, afk: p.afk, ping: p.ping,
+    }));
+  }
+
   // ---------------------------------------------------------------- networking
   _setupNet() {
     const net = this.net;
@@ -584,12 +653,14 @@ export class Game {
       this._electHost();
     });
     net.on('hello', (d, from) => {
+      if (this.kicked.has(from)) return;
       let p = this.players.get(from);
       if (!p) { p = this.addPlayer(from, { name: d.n, color: d.c, owner: from }); this.hud.feedText(`${d.n} joined`, d.c); }
       else if (p.name !== d.n || p.color !== d.c) { p.name = d.n; p.color = d.c; p.avatar.setName(d.n, d.c); }
       p.lastSeen = now();
     });
     net.on('st', (d, from) => {
+      if (this.kicked.has(from)) return;
       let p = this.players.get(from);
       if (!p) p = this.addPlayer(from, { name: '...', color: '#ccc', owner: from });
       this._pushSnap(p, d);
@@ -612,6 +683,7 @@ export class Game {
         const p = this.players.get(id);
         if (!p) continue;
         [p.kills, p.deaths, p.score, p.streak, p.best, p.wins] = s;
+        if (!p.isLocal) p.afk = !!s[6];
       }
     });
     net.on('match', (d, from) => {
@@ -659,6 +731,18 @@ export class Game {
       sfx.blink(d.b);
       if (p && !p.ms) { p.snaps.length = 0; p.rpos = [...d.b]; }
     });
+    net.on('afk', (d, from) => {
+      if (from !== this.hostId && from !== d.id) return;   // only the host or the player themself
+      this.setAfk(d.id, !!d.on);
+    });
+    net.on('kick', (d, from) => {
+      if (from !== this.hostId) return;
+      if (d.id === this.selfId) { if (this.onKicked) this.onKicked(); return; }
+      this.kicked.add(d.id);
+      const p = this.players.get(d.id);
+      if (p) this.hud.feedText(`${p.name} was removed by the host`, '#ff6b6b');
+      for (const q of [...this.players.values()]) if (q.id === d.id || (q.isBot && q.owner === d.id)) this.removePlayer(q.id);
+    });
     net.on('melee', (d) => {
       const p = this.players.get(d.id);
       if (!p || p.ms) return;
@@ -693,7 +777,7 @@ export class Game {
     if (!this.net) return;
     this.lastRosterSend = this.time;
     const s = {};
-    for (const p of this.players.values()) s[p.id] = [p.kills, p.deaths, p.score, p.streak, p.best, p.wins];
+    for (const p of this.players.values()) s[p.id] = [p.kills, p.deaths, p.score, p.streak, p.best, p.wins, p.afk ? 1 : 0];
     this.net.send('roster', { bots: this.bots.map(b => [b.p.id, b.p.name, b.p.color]), s });
   }
 
@@ -758,7 +842,7 @@ export class Game {
     L.yaw = this.view.yaw; L.pitch = aimPitch;
 
     // --- local actions
-    const canAct = L.alive && this.match.phase !== 'end';
+    const canAct = L.alive && !L.afk && this.match.phase !== 'end';
     const adsHeld = inputActive && inp.mouseR && L.alive && this.time >= L.reloadUntil && !WEAPONS[L.weapon].melee;
     const adsRate = WEAPONS[L.weapon].scope ? 11 : 14;
     this.view.ads += ((adsHeld ? 1 : 0) - this.view.ads) * Math.min(1, dt * adsRate);
@@ -808,6 +892,12 @@ export class Game {
       this.view.recoilYaw *= Math.exp(-dt * 0.6);
     }
     if (pressed.has('KeyH')) { this.helpShown = !this.helpShown; this.helpUntil = Infinity; }
+    if (L.afk && (pressed.has('Enter') || pressed.has('NumpadEnter'))) this.requestAfk(L.id, false);
+    if (this.net && !L.afk && this.match.phase === 'play' && performance.now() - (this.input.lastInput || performance.now()) > 60000) {
+      this.input.lastInput = performance.now();
+      this.requestAfk(L.id, true);
+      this.hud.feedText('You were idle for 60s and moved to the AFK box', '#ffd60a');
+    }
     inp.pressed.clear();
 
     // --- reload completion & utility timers for simulated players
@@ -859,7 +949,7 @@ export class Game {
     }
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const pr = this.projectiles[i];
-      if (pr.dead) { this.scene.remove(pr.mesh); pr.mesh.geometry.dispose(); pr.mesh.material.dispose(); this.projectiles.splice(i, 1); continue; }
+      if (pr.dead) { this.scene.remove(pr.mesh); this.projectiles.splice(i, 1); continue; }
       pr.mesh.position.set(...pr.pos);
       if (pr.kind === 'blink') { pr.mesh.rotation.y += dt * 12; pr.mesh.rotation.x = pr.normal && pr.normal[1] === 0 ? Math.PI / 2 : 0; }
       if (pr.kind === 'nade' && Math.random() < 0.3) this.effects.particle(pr.pos, [0, 0.5, 0], '#ff7b4a', 0.25, 0);
@@ -1004,7 +1094,9 @@ export class Game {
       timeLeft: this.match.t, round: this.match.round, phase: this.match.phase, myKills: L.kills, killLimit: this.match.killLimit,
       rank, total: ranked.length, leaderName: top ? top.name : '', leaderKills: top ? top.kills : 0, leaderColor: top ? top.color : '#fff',
       roomCode: this.roomCode, players: [...this.players.values()].filter(p => !p.isBot).length, isHost: this.net && this.isHost,
+      bots: this.botCount, difficulty: this.difficulty,
     });
+    h.setAfk(!!L.afk);
     if (!L.alive && this.match.phase !== 'end') {
       const k = L.killedBy && this.players.get(L.killedBy);
       h.death(k ? k.name : '', k ? k.color : '#fff', L.respawnAt - this.time);
@@ -1015,9 +1107,9 @@ export class Game {
     const showSb = keys.has('Tab') || this.match.phase === 'end';
     if (showSb) {
       const w = this.match.winner && this.players.get(this.match.winner);
-      h.scoreboard(true, ranked.map(p => ({ name: p.name, color: p.color, bot: p.isBot, score: p.score, kills: p.kills, deaths: p.deaths, best: p.best, wins: p.wins, me: p.isLocal, ping: p.isLocal ? '' : p.isBot ? 'BOT' : (p.ping ? p.ping + 'ms' : '') })),
-        this.match.phase === 'end' ? (w ? `${w.name} wins round ${this.match.round}` : 'Round over') : `ROUND ${this.match.round} · FREE FOR ALL`,
-        this.match.phase === 'end' ? `Next round in ${Math.max(0, Math.ceil(this.match.t))}s` : 'Hold TAB');
+      h.scoreboard(true, ranked.map(p => ({ name: p.name, color: p.color, bot: p.isBot, afk: p.afk, host: !!this.net && p.id === this.hostId, score: p.score, kills: p.kills, deaths: p.deaths, best: p.best, wins: p.wins, me: p.isLocal, ping: p.isLocal ? '' : p.isBot ? 'BOT' : (p.ping ? p.ping + 'ms' : '') })),
+        this.match.phase === 'end' ? (w ? `${w.name.toUpperCase()} WINS ROUND ${this.match.round}` : 'ROUND OVER') : `ROUND ${this.match.round} · FREE FOR ALL · ${this.net ? 'ONLINE ' + this.roomCode : 'OFFLINE'}`,
+        this.match.phase === 'end' ? `NEXT ROUND IN ${Math.max(0, Math.ceil(this.match.t))}S` : 'HOLD TAB');
     } else h.scoreboard(false, []);
     h.update(dt);
   }

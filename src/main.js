@@ -16,13 +16,25 @@ const store = {
 const params = new URLSearchParams(location.search);
 const settings = {
   sens: store.get('sens', 1), fov: store.get('fov', 80), volume: store.get('volume', 0.6),
-  shadows: store.get('shadows', true), invert: store.get('invert', false),
+  quality: store.get('quality', 'medium'), invert: store.get('invert', false), showFps: store.get('showFps', false),
 };
 
 const renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: params.has('test') });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+function applyQuality() {
+  const dpr = window.devicePixelRatio || 1;
+  const q = settings.quality;
+  renderer.setPixelRatio(q === 'low' ? Math.min(dpr, 1) * 0.75 : q === 'high' ? Math.min(dpr, 1.5) : Math.min(dpr, 1));
+  renderer.shadowMap.enabled = q !== 'low';
+  renderer.shadowMap.type = q === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  if (game) {
+    game.sun.castShadow = q !== 'low';
+    const sm = q === 'high' ? 2048 : 1024;
+    if (game.sun.shadow.mapSize.x !== sm) { game.sun.shadow.mapSize.set(sm, sm); if (game.sun.shadow.map) { game.sun.shadow.map.dispose(); game.sun.shadow.map = null; } }
+    game.scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.needsUpdate = true); });
+    game.onResize();
+  }
+}
+applyQuality();
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
@@ -71,7 +83,12 @@ function bindRange(id, key, fmt = (v) => v) {
 bindRange('sens', 'sens', v => (+v).toFixed(2));
 bindRange('fov', 'fov', v => Math.round(v));
 bindRange('volume', 'volume', v => Math.round(v * 100) + '%');
-$('shadows').checked = settings.shadows; $('shadows').onchange = () => { settings.shadows = $('shadows').checked; store.set('shadows', settings.shadows); if (game) game.sun.castShadow = settings.shadows; };
+const qSeg = $('quality-seg');
+const paintQ = () => qSeg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.q === settings.quality));
+qSeg.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; settings.quality = b.dataset.q; store.set('quality', settings.quality); paintQ(); applyQuality(); });
+paintQ();
+$('showfps').checked = settings.showFps; $('showfps').onchange = () => { settings.showFps = $('showfps').checked; store.set('showFps', settings.showFps); $('fps').style.display = settings.showFps ? '' : 'none'; };
+$('fps').style.display = settings.showFps ? '' : 'none';
 $('invert').checked = settings.invert; $('invert').onchange = () => { settings.invert = $('invert').checked; store.set('invert', settings.invert); };
 
 function commonOpts() {
@@ -105,8 +122,20 @@ async function start(mode) {
   game = new Game(renderer, opts);
   $('menu').style.display = 'none';
   game.hud.show(true);
-  if (opts.roomCode) game.hud.feedText(`Room ${opts.roomCode} — share the link to invite friends`, '#7ff8ff');
+  if (opts.roomCode) game.hud.feedText(`Online room ${opts.roomCode}. Press Esc to copy the invite link`, '#ffd60a');
+  game.onKicked = () => { leaveToMenu('You were removed from the room by the host.'); };
+  game.input.lastInput = performance.now();
   lock();
+}
+
+function leaveToMenu(msg = '') {
+  if (game) { game.dispose(); game = null; }
+  clearInterval(pauseTimer);
+  if (document.pointerLockElement) document.exitPointerLock();
+  $('pause').style.display = 'none'; $('hud').style.display = 'none'; $('menu').style.display = 'block';
+  preview.start();
+  const url = new URL(location.href); url.searchParams.delete('room'); history.replaceState(null, '', url);
+  $('status').textContent = msg;
 }
 
 $('play-bots').onclick = () => start('offline');
@@ -116,13 +145,8 @@ $('copy-link').onclick = async () => {
   try { await navigator.clipboard.writeText(location.href); $('copy-link').textContent = 'COPIED ✓'; } catch { $('copy-link').textContent = location.href; }
   setTimeout(() => $('copy-link').textContent = 'COPY INVITE LINK', 1500);
 };
-$('quit').onclick = () => {
-  if (game) { game.dispose(); game = null; }
-  $('pause').style.display = 'none'; $('hud').style.display = 'none'; $('menu').style.display = 'block';
-  preview.start();
-  const url = new URL(location.href); url.searchParams.delete('room'); history.replaceState(null, '', url);
-};
-$('pause-bots').oninput = () => { $('pause-bots-val').textContent = $('pause-bots').value; if (game && game.isHost) game.setBotCount(+$('pause-bots').value); store.set('bots', +$('pause-bots').value); };
+$('quit').onclick = () => leaveToMenu();
+$('pause-bots').oninput = () => { $('pause-bots-val').textContent = $('pause-bots').value; if (game && game.isHost) game.setBotCount(+$('pause-bots').value); store.set('bots', +$('pause-bots').value); $('bots').value = $('pause-bots').value; $('bots-val').textContent = $('bots').value; renderPause(); };
 if (params.get('room')) $('room-hint').textContent = 'You were invited to room ' + params.get('room') + '. Hit JOIN.';
 
 // ---------------------------------------------------------------- input
@@ -140,19 +164,59 @@ document.addEventListener('pointerlockchange', () => {
     $('pause').style.display = 'flex';
     $('pause-bots').value = game.botCount; $('pause-bots-val').textContent = game.botCount;
     diffIdx = Math.max(0, DIFFICULTIES.indexOf(game.difficulty)); paintSeg();
-    $('pause-bots-row').style.display = game.isHost ? '' : 'none';
-    $('pause-room').textContent = game.roomCode ? `Room ${game.roomCode}` : 'Offline match vs bots';
-    $('copy-link').style.display = game.roomCode ? '' : 'none';
+    renderPause();
+    clearInterval(pauseTimer); pauseTimer = setInterval(renderPause, 1000);
+  } 
+  if (document.pointerLockElement === canvas) clearInterval(pauseTimer);
+});
+
+// ---------------------------------------------------------------- pause menu (mode-aware)
+let pauseTimer = 0;
+const DIFF_NAMES = ['EASY', 'MEDIUM', 'HARD', 'LEGENDARY'];
+const escHtml = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function renderPause() {
+  if (!game || $('pause').style.display !== 'flex') return;
+  const online = !!game.net, host = game.isHost;
+  $('pause-mode').textContent = online ? `ONLINE ROOM · ${game.roomCode}` : 'OFFLINE';
+  $('pause-mode').classList.toggle('on', online);
+  $('pause-room').textContent = online
+    ? (host ? 'You are the host. You manage bots and players.' : 'The host manages bots and players.')
+    : `Solo match vs ${game.botCount} bot${game.botCount === 1 ? '' : 's'}. The match keeps running while paused.`;
+  $('pause-online').style.display = online ? '' : 'none';
+  $('pause-bots-row').style.display = host ? '' : 'none';
+  $('bots-readonly').style.display = host ? 'none' : '';
+  $('bots-readonly').textContent = host ? '' : `BOTS ${game.botCount} · ${DIFF_NAMES[Math.max(0, DIFFICULTIES.indexOf(game.difficulty))]} (set by host)`;
+  $('quit').textContent = online ? 'LEAVE ROOM' : 'QUIT TO MENU';
+  if (online) {
+    const rows = game.playerList();
+    $('plist').innerHTML = rows.map(r => `<div class="prow">
+      <span class="dot" style="background:${r.color}"></span><b>${escHtml(r.name)}</b>
+      ${r.me ? '<i class="tag">YOU</i>' : ''}${r.host ? '<i class="tag host">HOST</i>' : ''}${r.afk ? '<i class="tag afk">AFK</i>' : ''}
+      <span class="ping">${r.me ? '' : (r.ping ? r.ping + 'ms' : '…')}</span>
+      ${host && !r.me ? `<button class="mini" data-act="${r.afk ? 'return' : 'afk'}" data-id="${r.id}">${r.afk ? 'RETURN' : 'AFK BOX'}</button><button class="mini red" data-act="kick" data-id="${r.id}">KICK</button>` : ''}
+    </div>`).join('');
+    $('plist-hint').textContent = host
+      ? 'AFK BOX moves a player to a sealed glass room above the map. They can press ENTER to come back.'
+      : (rows.length < 2 ? 'Nobody else here yet. Copy the invite link above.' : '');
   }
+}
+$('plist').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b || !game || !game.isHost) return;
+  const id = b.dataset.id;
+  if (b.dataset.act === 'kick') game.kickPlayer(id);
+  else game.requestAfk(id, b.dataset.act === 'afk');
+  renderPause();
 });
 document.addEventListener('mousemove', (e) => {
   if (!game || document.pointerLockElement !== canvas) return;
+  game.input.lastInput = performance.now();
   // ignore occasional giant spikes some browsers produce
   if (Math.abs(e.movementX) > 400 || Math.abs(e.movementY) > 400) return;
   game.input.dx += e.movementX; game.input.dy += e.movementY;
 });
 document.addEventListener('mousedown', (e) => {
   if (!game || document.pointerLockElement !== canvas) return;
+  game.input.lastInput = performance.now();
   if (e.button === 0) { game.input.mouseL = true; game.input.clickL = true; }
   if (e.button === 2) game.input.mouseR = true;
 });
@@ -163,11 +227,12 @@ document.addEventListener('mouseup', (e) => {
 });
 document.addEventListener('contextmenu', (e) => { if (game) e.preventDefault(); });
 document.addEventListener('wheel', (e) => { if (game && document.pointerLockElement === canvas) { game.input.wheelDir = Math.sign(e.deltaY); game.input.pressed.add('wheel'); } }, { passive: true });
-const gameKeys = new Set(['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyR', 'KeyC', 'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyV', 'KeyH', 'ControlLeft']);
+const gameKeys = new Set(['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyR', 'KeyC', 'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyV', 'KeyH', 'ControlLeft', 'Enter']);
 document.addEventListener('keydown', (e) => {
   if (!game) return;
   if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
   if (gameKeys.has(e.code)) e.preventDefault();
+  game.input.lastInput = performance.now();
   if (!e.repeat) game.input.pressed.add(e.code);
   game.input.keys.add(e.code);
 });
@@ -177,9 +242,12 @@ window.addEventListener('resize', () => { if (game) game.onResize(); });
 
 // ---------------------------------------------------------------- loop
 let lastRaf = performance.now();
+let fpsFrames = 0, fpsT = performance.now(), worst = 0;
 function frame(t) {
   requestAnimationFrame(frame);
   lastRaf = performance.now();
+  fpsFrames++; worst = Math.max(worst, t - last);
+  if (t - fpsT > 500) { if (settings.showFps && game) $('fps').textContent = `${Math.round(fpsFrames * 1000 / (t - fpsT))} FPS · ${worst.toFixed(0)}ms`; fpsFrames = 0; fpsT = t; worst = 0; }
   const dt = Math.min(0.1, (t - last) / 1000); last = t;
   if (!game) return;
   game.update(dt);

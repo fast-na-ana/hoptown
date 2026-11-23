@@ -76,7 +76,7 @@ export class Bot {
   }
 
   wander() {
-    const enemies = [...this.g.players.values()].filter(o => o !== this.p && o.alive);
+    const enemies = [...this.g.players.values()].filter(o => o !== this.p && o.alive && !o.afk);
     if (enemies.length && Math.random() < 0.55) {
       const e = enemies[Math.floor(Math.random() * enemies.length)];
       const ep = this.g.posOf(e);
@@ -103,7 +103,7 @@ export class Bot {
     const eye = this.g.eyeOf(p);
     let best = null, bestD = Infinity;
     for (const o of this.g.players.values()) {
-      if (o === p || !o.alive) continue;
+      if (o === p || !o.alive || o.afk) continue;
       if (this.g.match.phase === 'warmup') continue;
       const op = this.g.posOf(o);
       const d = Math.hypot(op[0] - eye[0], op[1] - eye[1], op[2] - eye[2]);

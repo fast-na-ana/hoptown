@@ -1,6 +1,7 @@
 // First-person weapons (original procedural designs) with spring-based animation.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { mergeByMaterial } from './merge.js';
 
 // ------------------------------------------------------------------ helpers
 const mats = {};
@@ -86,6 +87,7 @@ function buildRifle(P) {
   box(g, 0.058, 0.096, 0.022, P.accent, 0, 0.01, 0.35);              // butt pad
   box(g, 0.03, 0.07, 0.035, P.poly, 0, -0.035, -0.4);                // foregrip
   const charge = box(g, 0.034, 0.012, 0.022, P.grey, 0, 0.07, 0.1);  // charging handle
+  charge.userData.keep = true;
   const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.032, -0.73); g.add(muzzle);
   const eject = new THREE.Object3D(); eject.position.set(0.04, 0.04, -0.04); g.add(eject);
   const right = new THREE.Group(); g.add(right);
@@ -255,6 +257,7 @@ export class ViewModel {
     this.models = { rifle: buildRifle(P), sniper: buildSniper(P), pistol: buildPistol(P), knife: buildKnife(P) };
     for (const k in this.models) {
       const m = this.models[k];
+      mergeByMaterial(m.g);
       m.g.visible = false; m.g.scale.setScalar(m.scale); this.holder.add(m.g);
       if (m.mag) m.magHome = m.mag.position.clone();
       if (m.left) m.leftHome = m.left.position.clone();

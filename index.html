@@ -74,7 +74,8 @@
         <div class="field"><label class="mono" for="sens">SENSITIVITY <b id="sens-val"></b></label><input id="sens" type="range" min="0.1" max="4" step="0.05"></div>
         <div class="field"><label class="mono" for="fov">FIELD OF VIEW <b id="fov-val"></b></label><input id="fov" type="range" min="60" max="100" step="1"></div>
         <div class="field"><label class="mono" for="volume">VOLUME <b id="volume-val"></b></label><input id="volume" type="range" min="0" max="1" step="0.05"></div>
-        <div class="checks"><label class="chk"><input id="shadows" type="checkbox"><span>SHADOWS</span></label><label class="chk"><input id="invert" type="checkbox"><span>INVERT Y</span></label></div>
+        <div class="field"><span class="mono lbl">GRAPHICS QUALITY</span><div class="seg seg3" id="quality-seg"><button type="button" data-q="low">LOW</button><button type="button" data-q="medium">MEDIUM</button><button type="button" data-q="high">HIGH</button></div></div>
+        <div class="checks"><label class="chk"><input id="invert" type="checkbox"><span>INVERT Y</span></label><label class="chk"><input id="showfps" type="checkbox"><span>SHOW FPS</span></label></div>
       </div>
     </section>
   </div>
@@ -99,6 +100,8 @@
   <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="c"></i></div>
   <div id="hitmarker"></div>
   <div id="prompt"></div>
+  <div id="afk-banner"><b>AFK BOX</b><span>You can&#39;t shoot or be shot here. Press <kbd>ENTER</kbd> to rejoin.</span></div>
+  <div id="fps" class="mono"></div>
   <div id="announce"></div>
   <div id="notice"></div>
   <div id="centerbig"></div>
@@ -145,15 +148,23 @@
 
 <div id="pause" style="display:none">
   <div class="card pause-card">
-    <div class="card-head"><span class="num">II</span><h2>PAUSED</h2></div>
+    <div class="card-head"><span class="num">II</span><h2>PAUSED</h2><span class="mode-chip mono" id="pause-mode">OFFLINE</span></div>
     <p id="pause-room" class="mono hint"></p>
     <button id="resume" class="go">RESUME <span>→</span></button>
-    <button id="copy-link" class="btn">COPY INVITE LINK</button>
-    <div id="pause-bots-row">
+    <div id="pause-online">
+      <button id="copy-link" class="btn">COPY INVITE LINK</button>
+      <div class="pbox">
+        <div class="mono lbl">PLAYERS IN ROOM</div>
+        <div id="plist"></div>
+        <p class="mono hint" id="plist-hint"></p>
+      </div>
+    </div>
+    <div class="pbox" id="pause-bots-row">
       <div class="field"><label class="mono" for="pause-bots">BOTS <b id="pause-bots-val"></b></label><input id="pause-bots" type="range" min="0" max="9" step="1"></div>
       <div class="field"><span class="mono lbl">DIFFICULTY</span><div class="seg" id="pause-seg"><button type="button" data-d="0">EASY</button><button type="button" data-d="1">MED</button><button type="button" data-d="2">HARD</button><button type="button" data-d="3">LEGEND</button></div></div>
     </div>
-    <button id="quit" class="btn ghost">LEAVE MATCH</button>
+    <p id="bots-readonly" class="mono hint"></p>
+    <button id="quit" class="btn ghost">QUIT TO MENU</button>
   </div>
 </div>
 

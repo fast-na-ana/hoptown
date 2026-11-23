@@ -1,0 +1,16 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({executablePath:'/usr/bin/google-chrome',headless:'new',protocolTimeout:300000,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const p = await b.newPage(); await p.setViewport({width:1366,height:768});
+const errs=[]; p.on('pageerror', e => errs.push(e.message));
+await p.goto('http://localhost:8123/index.html?test&nopreview', {waitUntil:'load'});
+await p.evaluate(() => { localStorage.setItem('hoptown.showFps', 'true'); });
+await p.goto('http://localhost:8123/index.html?test&nopreview', {waitUntil:'load'});
+await p.evaluate(() => { document.getElementById('bots').value = 4; window.__start('offline'); });
+await p.evaluate(async () => { const g = window.__hoptown.game; g.forceInput = true; g.helpShown = false; g.helpUntil = Infinity; while (g.match.phase !== 'play') await new Promise(r=>setTimeout(r,50)); g.local.kills = 3; g.local.streak = 3; g.hud.addFeed('Nova', '#ffd23f', 'Bolt', '#7bdb6a', 'sniper', true); g.hud.addFeed(g.local.name, g.local.color, 'Rivet', '#c77dff', 'knife', false); g.hud.notice('+100  ELIMINATED RIVET'); const t0 = g.time; while (g.time - t0 < 0.6) await new Promise(r=>setTimeout(r,16)); });
+await p.screenshot({path:'test/shots/hud-play.png'});
+await p.evaluate(async () => { const g = window.__hoptown.game; g.input.keys.add('Tab'); const t0 = g.time; while (g.time - t0 < 0.3) await new Promise(r=>setTimeout(r,16)); });
+await p.screenshot({path:'test/shots/hud-tab.png'});
+await p.evaluate(async () => { const g = window.__hoptown.game; g.input.keys.delete('Tab'); g.forceInput = false; document.exitPointerLock(); document.getElementById('pause').style.display = 'flex'; document.dispatchEvent(new Event('pointerlockchange')); await new Promise(r=>setTimeout(r,500)); });
+await p.screenshot({path:'test/shots/pause-offline.png'});
+console.log('ERR', errs);
+await b.close();
