@@ -1,7 +1,7 @@
 // Live, slowly orbiting view of the map for the main menu.
 import * as THREE from 'three';
 import { World } from './physics.js';
-import { buildMap } from './map.js';
+import { buildMap } from './maps/index.js';
 import { Avatar } from './avatar.js';
 import { COLORS } from './config.js';
 
@@ -9,6 +9,7 @@ export class MenuPreview {
   constructor(canvas) {
     this.canvas = canvas;
     this.running = false;
+    this.mapId = 'maple';
   }
 
   start() {
@@ -22,18 +23,19 @@ export class MenuPreview {
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.shadowMap.enabled = true;
     const scene = this.scene = new THREE.Scene();
-    scene.background = new THREE.Color('#a9d6ff');
-    scene.fog = new THREE.Fog('#cfe6ff', 50, 130);
-    scene.add(new THREE.HemisphereLight('#d9ecff', '#6b8f4e', 1.25));
-    const sun = new THREE.DirectionalLight('#fff3dc', 2.4);
+    this.map = buildMap(this.mapId, new World(), scene);
+    const e = this.map.env;
+    scene.background = new THREE.Color(e.mid);
+    scene.fog = new THREE.Fog(e.fog, 60, 170);
+    scene.add(new THREE.HemisphereLight(e.hemiSky, e.hemiGround, 1.25));
+    const sun = new THREE.DirectionalLight(e.sun, e.sunI);
     sun.position.set(28, 44, 22); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
-    Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 130 });
+    Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 160 });
     sun.shadow.bias = -0.0006;
     scene.add(sun);
-    this.map = buildMap(new World(), scene);
     // a few idle hop-bots for life
     this.bots = [];
-    const spots = [[-3, 0, -3.4, 0.4], [6.5, 0, 3.2, 2.6], [-12, 6.5, -15, 0.8], [12, 6.5, 15, -2.4], [-0.5, 0, -16, 3.0]];
+    const spots = this.map.spawns.filter((_, i) => i % 3 === 0).slice(0, 5).map(s => [s[0], s[1], s[2], Math.random() * 6]);
     spots.forEach(([x, y, z, yaw], i) => {
       const a = new Avatar(COLORS[(i + 1) % COLORS.length], ['Sprocket', 'Rivet', 'Nova', 'Bolt', 'Pixel'][i]);
       a.tag.visible = false;
@@ -52,8 +54,8 @@ export class MenuPreview {
       const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
       this._resize();
       this.t += dt * 0.07;
-      const R = 40, cam = this.camera;
-      cam.position.set(Math.cos(this.t) * R, 19 + Math.sin(this.t * 1.7) * 3, Math.sin(this.t) * R);
+      const R = this.map.preview.radius, cam = this.camera;
+      cam.position.set(Math.cos(this.t) * R, this.map.preview.height + Math.sin(this.t * 1.7) * 3, Math.sin(this.t) * R);
       cam.lookAt(0, 1.5, 0);
       for (const b of this.bots) {
         b.ph += dt;
@@ -71,6 +73,12 @@ export class MenuPreview {
     this._w = w; this._h = h;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+  }
+
+  setMap(id) {
+    if (id === this.mapId && this.running) return;
+    this.mapId = id;
+    if (this.running) { this.stop(); this.start(); }
   }
 
   stop() {

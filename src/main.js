@@ -5,6 +5,8 @@ import { LocalNet, RtcNet } from './net.js';
 import { COLORS } from './config.js';
 import { DIFFICULTIES } from './bots.js';
 import { MenuPreview } from './preview.js';
+import { MAP_LIST } from './maps/index.js';
+import { MODES } from './modes.js';
 import { stepMovement, makeMoveState, emptyInput } from './movement.js';
 
 const $ = (id) => document.getElementById(id);
@@ -71,7 +73,36 @@ document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () =>
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
   document.querySelectorAll('.tab-body').forEach(x => x.classList.toggle('on', x.id === 'tab-' + t.dataset.tab));
 }));
+// ---- map + mode selection
+let selMap = store.get('map', 'maple'); if (!MAP_LIST.find(m => m.id === selMap)) selMap = 'maple';
+let selMode = store.get('mode', 'ffa'); if (!MODES[selMode]) selMode = 'ffa';
+$('map-sel').innerHTML = MAP_LIST.map((m, i) => `<button type="button" class="mapbtn" data-map="${m.id}"><small>MAP 0${i + 1} · ${m.size}</small><b>${m.name}</b></button>`).join('');
+$('pause-map-seg').classList.add('seg2');
+$('pause-map-seg').innerHTML = MAP_LIST.map(m => `<button type="button" data-map="${m.id}">${m.name}</button>`).join('');
+let pMap = selMap, pMode = selMode;
+function paintSel() {
+  document.querySelectorAll('#map-sel .mapbtn').forEach(b => b.classList.toggle('on', b.dataset.map === selMap));
+  document.querySelectorAll('#mode-seg button').forEach(b => b.classList.toggle('on', b.dataset.m === selMode));
+  const mi = MAP_LIST.findIndex(m => m.id === selMap);
+  $('win-title').textContent = `MAP_0${mi + 1} / ${MAP_LIST[mi].name}`;
+  $('mode-blurb').textContent = `${MODES[selMode].name}: ${MODES[selMode].blurb} ${MAP_LIST[mi].blurb}`;
+  document.querySelectorAll('#pause-map-seg button').forEach(b => b.classList.toggle('on', b.dataset.map === pMap));
+  document.querySelectorAll('#pause-mode-seg button').forEach(b => b.classList.toggle('on', b.dataset.m === pMode));
+}
+$('map-sel').addEventListener('click', (e) => { const b = e.target.closest('.mapbtn'); if (!b) return; selMap = b.dataset.map; store.set('map', selMap); paintSel(); preview.setMap(selMap); });
+$('mode-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; selMode = b.dataset.m; store.set('mode', selMode); paintSel(); });
+$('pause-map-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; pMap = b.dataset.map; paintSel(); });
+$('pause-mode-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; pMode = b.dataset.m; paintSel(); });
+$('apply-match').onclick = () => {
+  if (!game || !game.isHost) return;
+  game.applyMatchSettings(pMap, pMode, true);
+  selMap = pMap; selMode = pMode; store.set('map', selMap); store.set('mode', selMode); paintSel();
+  $('pause').style.display = 'none'; lock();
+};
+
 const preview = new MenuPreview($('preview'));
+preview.mapId = selMap;
+paintSel();
 if (!params.has('nopreview')) preview.start();
 $('room').value = params.get('room') || '';
 
@@ -96,7 +127,7 @@ function commonOpts() {
   store.set('name', name);
   store.set('bots', +$('bots').value);
   store.set('difficulty', DIFFICULTIES[diffIdx]);
-  return { name, color, settings, bots: +$('bots').value, difficulty: DIFFICULTIES[diffIdx] };
+  return { name, color, settings, bots: +$('bots').value, difficulty: DIFFICULTIES[diffIdx], map: selMap, mode: selMode };
 }
 
 function randRoom() { return Math.random().toString(36).slice(2, 7).toUpperCase(); }
@@ -164,6 +195,7 @@ document.addEventListener('pointerlockchange', () => {
     $('pause').style.display = 'flex';
     $('pause-bots').value = game.botCount; $('pause-bots-val').textContent = game.botCount;
     diffIdx = Math.max(0, DIFFICULTIES.indexOf(game.difficulty)); paintSeg();
+    $('pause')._painted = false;
     renderPause();
     clearInterval(pauseTimer); pauseTimer = setInterval(renderPause, 1000);
   } 
@@ -181,11 +213,13 @@ function renderPause() {
   $('pause-mode').classList.toggle('on', online);
   $('pause-room').textContent = online
     ? (host ? 'You are the host. You manage bots and players.' : 'The host manages bots and players.')
-    : `Solo match vs ${game.botCount} bot${game.botCount === 1 ? '' : 's'}. The match keeps running while paused.`;
+    : `Solo ${MODES[game.mode].name.toLowerCase()} on ${game.map.info.name} vs ${game.botCount} bot${game.botCount === 1 ? '' : 's'}. The match keeps running while paused.`;
   $('pause-online').style.display = online ? '' : 'none';
   $('pause-bots-row').style.display = host ? '' : 'none';
+  $('pause-match').style.display = host ? '' : 'none';
+  if (!$('pause')._painted) { pMap = game.mapId; pMode = game.mode; paintSel(); $('pause')._painted = true; }
   $('bots-readonly').style.display = host ? 'none' : '';
-  $('bots-readonly').textContent = host ? '' : `BOTS ${game.botCount} · ${DIFF_NAMES[Math.max(0, DIFFICULTIES.indexOf(game.difficulty))]} (set by host)`;
+  $('bots-readonly').textContent = host ? '' : `${game.map.info.name} · ${MODES[game.mode].short} · BOTS ${game.botCount} · ${DIFF_NAMES[Math.max(0, DIFFICULTIES.indexOf(game.difficulty))]} (set by host)`;
   $('quit').textContent = online ? 'LEAVE ROOM' : 'QUIT TO MENU';
   if (online) {
     const rows = game.playerList();
@@ -227,7 +261,7 @@ document.addEventListener('mouseup', (e) => {
 });
 document.addEventListener('contextmenu', (e) => { if (game) e.preventDefault(); });
 document.addEventListener('wheel', (e) => { if (game && document.pointerLockElement === canvas) { game.input.wheelDir = Math.sign(e.deltaY); game.input.pressed.add('wheel'); } }, { passive: true });
-const gameKeys = new Set(['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyR', 'KeyC', 'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyV', 'KeyH', 'ControlLeft', 'Enter']);
+const gameKeys = new Set(['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyR', 'KeyC', 'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyV', 'KeyH', 'KeyM', 'ControlLeft', 'Enter']);
 document.addEventListener('keydown', (e) => {
   if (!game) return;
   if (document.activeElement && document.activeElement.tagName === 'INPUT') return;

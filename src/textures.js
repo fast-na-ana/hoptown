@@ -90,3 +90,44 @@ export function makeTextures() {
   }, 13);
   return T;
 }
+
+// ---- desert set (Sunstone)
+export function makeDesertTextures() {
+  const T = {};
+  T.sand = canvasTex(256, (g, s, r) => {
+    noise(g, s, r, '#dcc08f', 0.14, 6000, 2);
+    for (let i = 0; i < 40; i++) { g.strokeStyle = 'rgba(150,110,60,0.12)'; g.lineWidth = 3; g.beginPath(); const y = r() * s; g.moveTo(0, y); g.bezierCurveTo(s * 0.3, y + 12, s * 0.6, y - 12, s, y); g.stroke(); }
+  }, 21);
+  const blocks = (base, mortar, seed, rows = 6) => canvasTex(256, (g, s, r) => {
+    noise(g, s, r, base, 0.1, 2500, 2);
+    const bh = s / rows;
+    for (let row = 0; row < rows; row++) {
+      g.fillStyle = mortar; g.fillRect(0, row * bh, s, 3);
+      const bw = s / (2 + Math.floor(r() * 2));
+      for (let x = (row % 2) * bw / 2; x < s; x += bw) g.fillRect(x, row * bh, 3, bh);
+      for (let k = 0; k < 6; k++) { g.fillStyle = `rgba(${r() > 0.5 ? '255,255,255' : '60,40,20'},0.06)`; g.fillRect(r() * s, row * bh + 3, 20 + r() * 50, bh - 3); }
+    }
+  }, seed);
+  T.sandstone = blocks('#d6b47c', 'rgba(110,80,40,0.35)', 22);
+  T.sandstoneDark = blocks('#b98f5a', 'rgba(80,55,25,0.4)', 23, 5);
+  const plaster = (base, seed) => canvasTex(256, (g, s, r) => {
+    noise(g, s, r, base, 0.08, 3000, 3);
+    for (let i = 0; i < 14; i++) { g.fillStyle = 'rgba(120,90,60,0.08)'; g.beginPath(); g.ellipse(r() * s, r() * s, 10 + r() * 40, 6 + r() * 20, r() * 3, 0, 6.28); g.fill(); }
+  }, seed);
+  T.plaster = plaster('#efe1c4', 24);
+  T.ochre = plaster('#e2b26a', 25);
+  T.terracotta = plaster('#c9774a', 26);
+  T.tile = canvasTex(256, (g, s, r) => {
+    noise(g, s, r, '#c8a77a', 0.08, 2000, 2);
+    g.strokeStyle = 'rgba(90,60,30,0.35)'; g.lineWidth = 2;
+    for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * s / 4, 0); g.lineTo(i * s / 4, s); g.stroke(); g.beginPath(); g.moveTo(0, i * s / 4); g.lineTo(s, i * s / 4); g.stroke(); }
+  }, 27);
+  const canvas = (a, b, seed) => canvasTex(128, (g, s, r) => {
+    for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? a : b; g.fillRect(i * s / 8, 0, s / 8, s); }
+    noise(g, 0, r, 'rgba(0,0,0,0)', 0.06, 0);
+  }, seed);
+  T.canvasRed = canvas('#c8402f', '#f1e6cf', 28);
+  T.canvasBlue = canvas('#2f6fb3', '#f1e6cf', 29);
+  T.palmWood = canvasTex(64, (g, s, r) => { g.fillStyle = '#8a6a43'; g.fillRect(0, 0, s, s); for (let y = 0; y < s; y += 8) { g.fillStyle = 'rgba(60,40,20,0.35)'; g.fillRect(0, y, s, 2); } }, 30);
+  return T;
+}

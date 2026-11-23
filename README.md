@@ -5,8 +5,18 @@ A fast-movement browser arena shooter built with Three.js. Play it at **https://
 - **Movement:** bunny hopping, air strafing, double jump, slides, jump pads
 - **Weapons:** VX-9 rifle (auto, red-dot sight, spray pattern), LR-7 Longbolt sniper (bolt-action, scoped; a scoped headshot kills), K-12 sidearm and the Arc Knife (one hit kills). Includes bullet holes, headshots, and animated reloads, bolt cycling and slashes
 - **Utility:** frag grenades (with knockback) and a blink disc you throw and then teleport to
-- **Map:** Maple Court, a small suburban street with two houses, garages, rooftops and a truck in the middle
-- **Match:** free-for-all rounds (first to 20 kills or 4 minutes), respawn timer, score, kill streaks, kill feed, scoreboard
+- **Maps** (original layouts, built from classic arena-design principles):
+  - **Maple Court:** two houses facing each other across a cul-de-sac, with staggered trucks, side yards and backyards for flanking, and trampolines up to the roofs.
+  - **Sunstone:** a desert market town with three lanes (a long road, a mid street with an arch choke, and a covered bazaar) crossing at a central plaza, plus rooftops and walled team bases.
+- **Modes:**
+  - **Free For All:** first to 20 kills.
+  - **Team Deathmatch:** first team to 40 kills.
+  - **Capture the Flag:** 3 captures wins. Dropped flags return after 15 seconds, and you can't blink while carrying the flag.
+- **HUD:** round timer, respawns, score, kill streaks, kill feed and scoreboard, plus a **minimap**:
+  - Teammates are always shown.
+  - Enemies appear only while you can see them.
+  - Teammates' death spots are marked.
+  - Press **M** for the full-screen map.
 - **Bots:** 0–9 bots at Easy, Medium, Hard or Legendary. They pathfind, strafe, jump, throw grenades and knife you up close
 - **Multiplayer:** peer-to-peer over WebRTC ([Trystero](https://github.com/dmotz/trystero)). There's no server: create a room and share the link
 

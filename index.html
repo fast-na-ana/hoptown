@@ -15,9 +15,9 @@
   <div class="ticker"><div class="ticker-track"><span>BUNNY HOP ✦ SLIDE ✦ DOUBLE JUMP ✦ BLINK ✦ FRAG OUT ✦ ONE-TAP KNIFE ✦ BOLT-ACTION ✦ </span><span>BUNNY HOP ✦ SLIDE ✦ DOUBLE JUMP ✦ BLINK ✦ FRAG OUT ✦ ONE-TAP KNIFE ✦ BOLT-ACTION ✦ </span></div></div>
   <div class="nb">
     <header class="nb-head">
-      <h1 class="logo">HOP<br>TOWN<span class="sticker">FFA</span></h1>
+      <h1 class="logo">HOP<br>TOWN<span class="sticker">2 MAPS · 3 MODES</span></h1>
       <div class="head-meta">
-        <p class="mono">FAST-MOVEMENT ARENA SHOOTER<br>BROWSER BUILD 0.3 · NO DOWNLOAD</p>
+        <p class="mono">FAST-MOVEMENT ARENA SHOOTER<br>BROWSER BUILD 0.4 · NO DOWNLOAD</p>
         <div class="field">
           <label class="mono" for="name">CALLSIGN</label>
           <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
@@ -30,9 +30,13 @@
     </header>
 
     <section class="win preview">
-      <div class="win-bar"><i></i><i></i><i></i><span class="mono">MAP_01 / MAPLE COURT</span><b class="mono live-tag">LIVE</b></div>
+      <div class="win-bar"><i></i><i></i><i></i><span class="mono" id="win-title">MAP_01 / MAPLE COURT</span><b class="mono live-tag">LIVE</b></div>
       <canvas id="preview"></canvas>
-      <div class="map-tags"><span>2 HOUSES</span><span>ROOFTOPS</span><span>JUMP PADS</span></div>
+      <div class="win-foot">
+        <div class="mapsel" id="map-sel"></div>
+        <div class="mode-row"><span class="mono lbl">MODE</span><div class="seg seg3" id="mode-seg"><button type="button" data-m="ffa">FFA</button><button type="button" data-m="tdm">TDM</button><button type="button" data-m="ctf">CTF</button></div></div>
+        <p class="mono hint" id="mode-blurb"></p>
+      </div>
     </section>
 
     <section class="card solo">
@@ -54,7 +58,7 @@
         <label class="mono" for="room">ROOM CODE</label>
         <input id="room" maxlength="12" placeholder="EMPTY = NEW ROOM" autocomplete="off" spellcheck="false">
       </div>
-      <p class="mono hint" id="room-hint">Peer-to-peer. Create a room, send the link. Bots fill empty slots.</p>
+      <p class="mono hint" id="room-hint">Peer-to-peer. Create a room with the map &amp; mode on the right, send the link. Joiners follow the host.</p>
       <button id="play-online" class="go">CREATE / JOIN <span>→</span></button>
       <p id="status" class="mono hint"></p>
     </section>
@@ -67,7 +71,7 @@
           <tr><td><kbd>SHIFT</kbd></td><td>crouch · slide when running</td><td><kbd>LMB</kbd> <kbd>RMB</kbd></td><td>fire · aim / scope</td></tr>
           <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>rifle · sniper · pistol · knife</td><td><kbd>R</kbd></td><td>reload</td></tr>
           <tr><td><kbd>G</kbd></td><td>frag grenade</td><td><kbd>Q</kbd></td><td>blink disc · again = warp</td></tr>
-          <tr><td><kbd>V</kbd></td><td>quick knife (one hit)</td><td><kbd>TAB</kbd> <kbd>H</kbd></td><td>scores · help</td></tr>
+          <tr><td><kbd>V</kbd></td><td>quick knife (one hit)</td><td><kbd>TAB</kbd> <kbd>H</kbd> <kbd>M</kbd></td><td>scores · help · big map</td></tr>
         </table>
       </div>
       <div class="tab-body" id="tab-settings">
@@ -87,14 +91,35 @@
   <div id="scope"><div class="lens"></div><div class="reticle"><i class="h"></i><i class="v"></i><i class="dot"></i><i class="m1"></i><i class="m2"></i><i class="m3"></i></div></div>
   <div id="dmg-layer"></div>
 
+  <div id="tl">
   <div id="match">
     <div class="m-top"><span id="m-round">ROUND 1</span><span id="m-phase">FREE FOR ALL</span></div>
     <div class="m-mid"><div id="timer">0:00</div><div class="m-score"><span class="lbl">KILLS</span><b id="m-kills">0</b><span class="of">/ <span id="m-goal">20</span></span></div></div>
+    <div class="m-teams" id="m-teams"></div>
     <div class="m-bar"><i id="m-bar"></i></div>
     <div class="m-bot"><span id="m-rank"></span><span id="m-leader"></span></div>
   </div>
   <div id="room-pill"></div>
+  <div id="help">
+    <h4>HOW TO PLAY <span>H to hide</span></h4>
+    <ul>
+      <li><kbd>Space</kbd> jump · tap again in air = <b>double jump</b> · hold to <b>bunny hop</b></li>
+      <li><kbd>Shift</kbd> while running = <b>slide</b> (speed boost). Jump out of a slide to keep it</li>
+      <li><kbd>A</kbd>/<kbd>D</kbd> + mouse turn in the air = <b>air strafe</b> for more speed</li>
+      <li><kbd>G</kbd> <b>Frag grenade</b> · 2 charges, refills over time · blast knocks you back</li>
+      <li><kbd>Q</kbd> <b>Blink</b> · throw the disc, press <kbd>Q</kbd> again to <b>teleport</b> to it</li>
+      <li><kbd>V</kbd> <b>Quick knife</b> · very close range · one hit = one kill · <kbd>4</kbd> to hold it</li>
+      <li><kbd>1</kbd> rifle · <kbd>2</kbd> sniper (scope with <kbd>RMB</kbd>) · <kbd>3</kbd> pistol · <kbd>4</kbd> knife</li>
+      <li><kbd>RMB</kbd> aim · <kbd>R</kbd> reload · <kbd>Tab</kbd> scores · <kbd>M</kbd> big map</li>
+      <li>Cyan pads in the backyards launch you onto the roofs</li>
+    </ul>
+  </div>
+  </div>
 
+  <div id="flagbar" style="display:none"></div>
+  <div id="minimap"><canvas id="mm"></canvas><span class="mm-key">M</span></div>
+  <div id="bigmap"><div class="bm-card"><div class="bm-head"><b>MAP</b><span class="mono">TEAMMATES · SPOTTED ENEMIES · DEATHS · FLAGS</span><span class="mono">M TO CLOSE</span></div><canvas id="bm"></canvas>
+    <div class="bm-legend mono"><span><i class="lg you"></i>YOU</span><span><i class="lg ally"></i>TEAMMATE</span><span><i class="lg enemy"></i>SPOTTED ENEMY (1s)</span><span><i class="lg dead">✕</i>TEAMMATE DIED</span><span><i class="lg flag"></i>FLAG</span></div></div></div>
   <div id="killfeed"></div>
 
   <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="c"></i></div>
@@ -121,20 +146,7 @@
     <div id="ammo"></div>
   </div>
 
-  <div id="help">
-    <h4>HOW TO PLAY <span>H to hide</span></h4>
-    <ul>
-      <li><kbd>Space</kbd> jump · tap again in air = <b>double jump</b> · hold to <b>bunny hop</b></li>
-      <li><kbd>Shift</kbd> while running = <b>slide</b> (speed boost). Jump out of a slide to keep it</li>
-      <li><kbd>A</kbd>/<kbd>D</kbd> + mouse turn in the air = <b>air strafe</b> for more speed</li>
-      <li><kbd>G</kbd> <b>Frag grenade</b> · 2 charges, refills over time · blast knocks you back</li>
-      <li><kbd>Q</kbd> <b>Blink</b> · throw the disc, press <kbd>Q</kbd> again to <b>teleport</b> to it</li>
-      <li><kbd>V</kbd> <b>Quick knife</b> · very close range · one hit = one kill · <kbd>4</kbd> to hold it</li>
-      <li><kbd>1</kbd> rifle · <kbd>2</kbd> sniper (scope with <kbd>RMB</kbd>) · <kbd>3</kbd> pistol · <kbd>4</kbd> knife</li>
-      <li><kbd>RMB</kbd> aim · <kbd>R</kbd> reload · <kbd>Tab</kbd> scores</li>
-      <li>Cyan pads in the backyards launch you onto the roofs</li>
-    </ul>
-  </div>
+
 
   <div id="death"><div id="death-by"></div><div id="death-timer"></div></div>
   <div id="scoreboard">
@@ -162,6 +174,12 @@
     <div class="pbox" id="pause-bots-row">
       <div class="field"><label class="mono" for="pause-bots">BOTS <b id="pause-bots-val"></b></label><input id="pause-bots" type="range" min="0" max="9" step="1"></div>
       <div class="field"><span class="mono lbl">DIFFICULTY</span><div class="seg" id="pause-seg"><button type="button" data-d="0">EASY</button><button type="button" data-d="1">MED</button><button type="button" data-d="2">HARD</button><button type="button" data-d="3">LEGEND</button></div></div>
+    </div>
+    <div class="pbox" id="pause-match">
+      <div class="mono lbl">MATCH · MAP &amp; MODE</div>
+      <div class="field"><div class="seg" id="pause-map-seg"></div></div>
+      <div class="field"><div class="seg seg3" id="pause-mode-seg"><button type="button" data-m="ffa">FFA</button><button type="button" data-m="tdm">TDM</button><button type="button" data-m="ctf">CTF</button></div></div>
+      <button id="apply-match" class="btn" style="margin-bottom:12px">APPLY &amp; RESTART</button>
     </div>
     <p id="bots-readonly" class="mono hint"></p>
     <button id="quit" class="btn ghost">QUIT TO MENU</button>

@@ -2,7 +2,9 @@
 import * as THREE from 'three';
 import { SIM_DT, PLAYER, MOVE, WEAPONS, GRENADE, BLINK, MATCH, STREAKS, COLORS, KNIFE } from './config.js';
 import { World, rayBox } from './physics.js';
-import { buildMap } from './map.js';
+import { buildMap } from './maps/index.js';
+import { MODES, TEAMS, FLAG, other } from './modes.js';
+import { Minimap } from './minimap.js';
 import { makeMoveState, emptyInput, stepMovement, findFreeSpot } from './movement.js';
 import { Avatar } from './avatar.js';
 import { ViewModel } from './viewmodel.js';
@@ -33,19 +35,26 @@ export class Game {
     this.acc = 0;
     this.input = { keys: new Set(), pressed: new Set(), mouseL: false, mouseR: false, clickL: false, dx: 0, dy: 0 };
     this.view = { yaw: 0, pitch: 0, recoil: 0, recoilYaw: 0, shake: 0, land: 0, roll: 0, fovKick: 0, ads: 0, step: 0 };
-    this.match = { phase: 'warmup', t: MATCH.warmup, round: 1, winner: null, killLimit: MATCH.killLimit, roundTime: MATCH.roundTime };
+    this.mapId = opts.map || 'maple';
+    this.mode = MODES[opts.mode] ? opts.mode : 'ffa';
+    this.teamScore = { A: 0, B: 0 };
+    this.match = { phase: 'warmup', t: MATCH.warmup, round: 1, winner: null, winnerTeam: null, killLimit: MODES[this.mode].limit, roundTime: MODES[this.mode].time };
     this.lastMatchSend = 0; this.lastStateSend = 0; this.lastRosterSend = 0;
     this.kicked = new Set();
     this.paused = false;
 
     this._setupScene();
     this.world = new World();
-    this.map = buildMap(this.world, this.scene);
+    this.map = buildMap(this.mapId, this.world, this.scene);
+    this._applyEnv();
     this.effects = new Effects(this.scene);
+    this._initFlags();
     this.vm = new ViewModel(opts.color, renderer);
     this.hud = new Hud();
+    this.minimap = new Minimap(this);
 
     this.local = this.addPlayer(this.selfId, { name: opts.name, color: opts.color, isLocal: true, owner: this.selfId });
+    if (this.teams && !this.net) this.local.team = 'A';
     this.spawn(this.local);
     if (this.net) this._setupNet(); else this._ensureBots();
     this.onResize();
@@ -75,6 +84,190 @@ export class Game {
   }
 
   get isHost() { return this.hostId === this.selfId; }
+  get teams() { return MODES[this.mode].teams; }
+  displayColor(p) { return this.teams && p.team ? TEAMS[p.team].color : p.color; }
+  isEnemy(a, b) { return a !== b && !(this.teams && a.team && a.team === b.team); }
+
+  _applyEnv() {
+    const e = this.map.env, u = this.sky.material.uniforms;
+    u.top.value.set(e.top); u.mid.value.set(e.mid); u.bot.value.set(e.bot);
+    this.scene.fog.color.set(e.fog);
+    this.hemi.color.set(e.hemiSky); this.hemi.groundColor.set(e.hemiGround);
+    this.sun.color.set(e.sun); this.sun.intensity = e.sunI;
+  }
+
+  // ---------------------------------------------------------------- teams
+  setTeam(p, team) {
+    if (!team || p.team === team) return;
+    const had = p.team;
+    p.team = team;
+    if (p.avatar) {
+      const vis = p.avatar.root.visible;
+      p.avatar.dispose(this.scene);
+      p.avatar = new Avatar(this.displayColor(p), p.name);
+      p.avatar.root.visible = vis;
+      this.scene.add(p.avatar.root);
+    }
+    if (p.isLocal && had && this.teams) this.hud.announce(`YOU ARE ${TEAMS[team].name}`, 'Team changed');
+    if (this.simulatedHere(p) && had && this.teams && p.alive && !p.afk) this.spawn(p);
+  }
+
+  _pickTeam(exclude) {
+    const c = { A: 0, B: 0 };
+    for (const o of this.players.values()) if (o !== exclude && o.team) c[o.team]++;
+    return c.A < c.B ? 'A' : c.B < c.A ? 'B' : (Math.random() < 0.5 ? 'A' : 'B');
+  }
+
+  // Host only: everyone gets a team; bots are shuffled to keep sides even.
+  _balanceTeams() {
+    if (!this.teams || !this.isHost) return;
+    for (const p of this.players.values()) if (!p.team) this.setTeam(p, this._pickTeam(p));
+    for (let guard = 0; guard < 10; guard++) {
+      const c = { A: 0, B: 0 };
+      for (const o of this.players.values()) c[o.team]++;
+      const big = c.A - c.B > 1 ? 'A' : c.B - c.A > 1 ? 'B' : null;
+      if (!big) break;
+      const bot = this.bots.find(b => b.p.team === big);
+      if (!bot) break;
+      this.setTeam(bot.p, other(big));
+    }
+    if (this.net) this._sendRoster();
+  }
+
+  // ---------------------------------------------------------------- flags (CTF)
+  _initFlags() {
+    if (this.flagGroup) { this.scene.remove(this.flagGroup); this.flagGroup.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+    this.flags = null; this.flagGroup = null;
+    if (this.mode !== 'ctf') return;
+    this.flagGroup = new THREE.Group();
+    this.flags = {};
+    for (const t of ['A', 'B']) {
+      const base = this.map.flags[t];
+      const g = new THREE.Group();
+      const col = TEAMS[t].color;
+      const pole = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.4, 0.08), new THREE.MeshStandardMaterial({ color: '#e8e8e8', metalness: 0.4, roughness: 0.4 }));
+      pole.position.y = 1.2; g.add(pole);
+      const cloth = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.7, 1.1), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.45 }));
+      cloth.position.set(0, 2.0, 0.58); g.add(cloth);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.07, 6, 28), new THREE.MeshBasicMaterial({ color: col }));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(base[0], base[1] + 0.06, base[2]);
+      this.flagGroup.add(ring);
+      this.flagGroup.add(g);
+      this.flags[t] = { state: 'home', pos: [...base], carrier: null, dropT: 0, mesh: g, cloth };
+    }
+    this.scene.add(this.flagGroup);
+  }
+
+  carrying(p) {
+    if (!this.flags) return null;
+    for (const t of ['A', 'B']) if (this.flags[t].state === 'carried' && this.flags[t].carrier === p.id) return t;
+    return null;
+  }
+
+  _flagEvent(t, ev, by) {
+    const f = this.flags[t];
+    const pl = by && this.players.get(by);
+    const mine = this.local.team === t;
+    const name = pl ? pl.name : '';
+    if (ev === 'take') {
+      if (pl && pl.isLocal) this.hud.announce('YOU HAVE THE FLAG', 'Bring it back to your base');
+      else this.hud.feedText(`${name} took ${TEAMS[t].name}'s flag`, TEAMS[t].color);
+      if (mine && !(pl && pl.isLocal)) this.hud.notice('YOUR FLAG WAS TAKEN');
+      sfx.pad(null);
+    } else if (ev === 'drop') this.hud.feedText(`${TEAMS[t].name} flag dropped`, TEAMS[t].color);
+    else if (ev === 'return') { this.hud.feedText(`${TEAMS[t].name} flag returned${name ? ' by ' + name : ''}`, TEAMS[t].color); }
+    else if (ev === 'capture') {
+      const capTeam = other(t);
+      this.hud.announce(`${TEAMS[capTeam].name} SCORES!`, `${name} captured the flag`);
+      sfx.streak();
+    }
+    f.lastEv = ev;
+  }
+
+  _setFlag(t, state, pos, carrier, ev, by) {
+    const f = this.flags[t];
+    f.state = state; f.carrier = carrier || null; f.dropT = 0;
+    if (pos) f.pos = [...pos];
+    if (ev) this._flagEvent(t, ev, by);
+    if (this.net && this.isHost) this.net.send('flag', { t, s: state, p: f.pos.map(r2), c: f.carrier, ev, by });
+  }
+
+  _hostFlags(dt) {
+    if (!this.flags || this.match.phase !== 'play') return;
+    for (const t of ['A', 'B']) {
+      const f = this.flags[t], base = this.map.flags[t];
+      if (f.state === 'carried') {
+        const c = this.players.get(f.carrier);
+        if (!c || !c.alive || c.afk) { const pp = c ? this.posOf(c) : f.pos; this._setFlag(t, 'dropped', [pp[0], Math.max(0, pp[1]), pp[2]], null, 'drop'); continue; }
+        // capture: carrier reaches own base while own flag is home
+        const own = this.flags[c.team], ob = this.map.flags[c.team], cp = this.posOf(c);
+        if (own.state === 'home' && Math.hypot(cp[0] - ob[0], cp[2] - ob[2]) < FLAG.capture && Math.abs(cp[1] - ob[1]) < 2) {
+          this.teamScore[c.team]++; c.score += FLAG.scoreCapture; c.caps = (c.caps || 0) + 1;
+          this._setFlag(t, 'home', base, null, 'capture', c.id);
+          this._sendMatch();
+          if (this.teamScore[c.team] >= this.match.killLimit) this._endRound();
+        }
+        continue;
+      }
+      if (f.state === 'dropped') { f.dropT += dt; if (f.dropT > FLAG.returnTime) { this._setFlag(t, 'home', base, null, 'return'); continue; } }
+      for (const p of this.players.values()) {
+        if (!p.alive || p.afk || !p.team) continue;
+        const pp = this.posOf(p);
+        if (Math.hypot(pp[0] - f.pos[0], pp[2] - f.pos[2]) > FLAG.touch || Math.abs(pp[1] - f.pos[1]) > 2) continue;
+        if (p.team !== t) { if (!this.carrying(p)) { p.score += FLAG.scorePickup; this._setFlag(t, 'carried', f.pos, p.id, 'take', p.id); break; } }
+        else if (f.state === 'dropped') { p.score += FLAG.scoreReturn; this._setFlag(t, 'home', base, null, 'return', p.id); break; }
+      }
+    }
+    if (this.net && this.time - (this._lastFlagSync || 0) > 1) {
+      this._lastFlagSync = this.time;
+      for (const t of ['A', 'B']) { const f = this.flags[t]; this.net.send('flag', { t, s: f.state, p: f.pos.map(r2), c: f.carrier }); }
+    }
+  }
+
+  _updateFlagMeshes(dt) {
+    if (!this.flags) return;
+    for (const t of ['A', 'B']) {
+      const f = this.flags[t];
+      let p = f.pos;
+      if (f.state === 'carried') { const c = this.players.get(f.carrier); if (c) { const cp = c.isLocal ? c.ms.pos : this.posOf(c); p = [cp[0], cp[1] + 0.9, cp[2]]; f.pos = [cp[0], cp[1], cp[2]]; } }
+      f.mesh.position.set(p[0], p[1], p[2]);
+      f.mesh.rotation.y += dt * (f.state === 'home' ? 0.8 : 2.5);
+      f.mesh.visible = !(f.state === 'carried' && f.carrier === this.local.id && this.local.alive);
+      f.cloth.scale.y = 1 + Math.sin(this.time * 6) * 0.05;
+    }
+  }
+
+  // ---------------------------------------------------------------- map / mode switching
+  applyMatchSettings(mapId, mode, broadcast = false) {
+    const mapChanged = mapId !== this.mapId;
+    this.mapId = mapId; this.mode = MODES[mode] ? mode : 'ffa';
+    if (mapChanged) {
+      this.scene.remove(this.map.group);
+      this.map.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); });
+      this.world = new World();
+      this.map = buildMap(this.mapId, this.world, this.scene);
+      this._applyEnv();
+      this.effects.clearHoles();
+      this.minimap.rebuild();
+    }
+    for (const b of this.bots) { b.path = []; b.pi = 0; b.target = null; }
+    this._initFlags();
+    this.teamScore = { A: 0, B: 0 };
+    this.match.killLimit = MODES[this.mode].limit; this.match.roundTime = MODES[this.mode].time;
+    this.match.phase = 'warmup'; this.match.t = MATCH.warmup; this.match.round = 1; this.match.winner = null; this.match.winnerTeam = null;
+    for (const p of this.players.values()) { p.wins = 0; if (!this.teams) this.setTeamNull(p); }
+    if (this.teams) { if (!this.net) { if (!this.local.team) this.setTeam(this.local, 'A'); for (const b of this.bots) if (!b.p.team) this.setTeam(b.p, this._pickTeam(b.p)); } this._balanceTeams(); }
+    this._onPhase('warmup');
+    this.hud.announce(`${MODES[this.mode].name}`, `${this.map.info.name} · ${MODES[this.mode].blurb}`);
+    if (broadcast && this.net && this.isHost) { this.net.send('restart', { mp: this.mapId, mo: this.mode }); this._sendMatch(); }
+  }
+
+  setTeamNull(p) {
+    if (!p.team) return;
+    p.team = null;
+    if (p.avatar) { const vis = p.avatar.root.visible; p.avatar.dispose(this.scene); p.avatar = new Avatar(p.color, p.name); p.avatar.root.visible = vis; this.scene.add(p.avatar.root); }
+  }
 
   // ---------------------------------------------------------------- scene
   _setupScene() {
@@ -91,7 +284,8 @@ export class Game {
     }));
     sky.frustumCulled = false;
     scene.add(sky); this.sky = sky;
-    scene.add(new THREE.HemisphereLight('#d9ecff', '#6b8f4e', 1.25));
+    this.hemi = new THREE.HemisphereLight('#d9ecff', '#6b8f4e', 1.25);
+    scene.add(this.hemi);
     const sun = new THREE.DirectionalLight('#fff3dc', 2.4);
     sun.position.set(28, 44, 22);
     sun.castShadow = (this.settings.quality || 'medium') !== 'low';
@@ -113,9 +307,9 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- players
-  addPlayer(id, { name, color, isBot = false, isLocal = false, owner }) {
+  addPlayer(id, { name, color, isBot = false, isLocal = false, owner, team = null }) {
     const p = {
-      id, name, color, isBot, isLocal, owner,
+      id, name, color, isBot, isLocal, owner, team,
       ms: (isLocal || (isBot && owner === this.selfId)) ? makeMoveState([0, 0, 0]) : null,
       prevPos: [0, 0, 0], rpos: [0, -50, 0], rvel: [0, 0, 0], rc: false, rg: true, snaps: [],
       yaw: 0, pitch: 0, hp: PLAYER.maxHealth, alive: false, respawnAt: 0, protectUntil: 0,
@@ -125,7 +319,7 @@ export class Game {
       avatar: null,
     };
     if (!isLocal) {
-      p.avatar = new Avatar(color, name);
+      p.avatar = new Avatar(this.displayColor(p), name);
       p.avatar.root.visible = false;
       this.scene.add(p.avatar.root);
     }
@@ -151,8 +345,8 @@ export class Game {
   }
 
   spawn(p) {
-    const enemies = [...this.players.values()].filter(o => o !== p && o.alive && !o.afk);
-    const pool = p.afk ? this.map.afkSpawns : this.map.spawns;
+    const enemies = [...this.players.values()].filter(o => o !== p && o.alive && !o.afk && this.isEnemy(o, p));
+    const pool = p.afk ? this.map.afkSpawns : (this.teams && p.team ? this.map.teamSpawns[p.team] : this.map.spawns);
     const scored = pool.map(s => {
       let d = 60;
       for (const e of enemies) {
@@ -192,13 +386,14 @@ export class Game {
       let name = BOT_NAMES.find(x => !used.has(x)) || 'Bot' + n;
       const id = this.selfId + ':b' + Math.random().toString(36).slice(2, 6);
       const color = COLORS[(n + 1) % COLORS.length];
-      const p = this.addPlayer(id, { name, color, isBot: true, owner: this.selfId });
+      const p = this.addPlayer(id, { name, color, isBot: true, owner: this.selfId, team: this.teams ? this._pickTeam() : null });
       const bot = new Bot(this, p, this.difficulty);
       if (n % 4 === 3) bot.role = 'sniper';
       this.bots.push(bot); mine.push(bot);
       this.spawn(p);
     }
     while (mine.length > want) { const b = mine.pop(); this.removePlayer(b.p.id); }
+    if (this.teams) this._balanceTeams();
   }
 
   setBotCount(n) { this.botCount = n; this._ensureBots(); }
@@ -243,7 +438,7 @@ export class Game {
     const wh = this.world.raycast(eye[0], eye[1], eye[2], d[0], d[1], d[2], 250);
     let bestT = wh ? wh.t : 250, target = null, head = false;
     for (const o of this.players.values()) {
-      if (o === p || !o.alive || o.afk) continue;
+      if (o === p || !o.alive || o.afk || !this.isEnemy(p, o)) continue;
       const hb = this.hitboxes(o);
       const rh = rayBox(eye[0], eye[1], eye[2], d[0], d[1], d[2], hb.head[0], hb.head[1]);
       if (rh && rh.t < bestT) { bestT = rh.t; target = o; head = true; }
@@ -335,7 +530,7 @@ export class Game {
     const eye = this.eyeOf(p), d = this.forward(yaw, pitch);
     let best = null, bestD = Infinity;
     for (const o of this.players.values()) {
-      if (o === p || !o.alive || o.afk) continue;
+      if (o === p || !o.alive || o.afk || !this.isEnemy(p, o)) continue;
       const op = this.posOf(o), h = this.crouchOf(o) ? PLAYER.crouchHeight : PLAYER.height;
       // closest point on the target's vertical segment to our eye
       const cy = Math.max(op[1] + 0.2, Math.min(op[1] + h - 0.1, eye[1]));
@@ -370,6 +565,7 @@ export class Game {
   damage(target, amount, attackerId, weapon, head, fromPos) {
     if (!target.alive || target.afk || this.match.phase !== 'play') return;
     const atk = this.players.get(attackerId); if (atk && atk.afk) return;
+    if (atk && atk !== target && !this.isEnemy(atk, target)) return;   // no friendly fire
     if (this.time < target.protectUntil && attackerId !== target.id) return;
     target.hp -= amount; target.lastHurt = this.time;
     if (target.isLocal) {
@@ -409,14 +605,19 @@ export class Game {
     } else if (msg.k === msg.v) {
       v.score = Math.max(0, v.score - 50);
     }
-    this.hud.addFeed(k ? k.name : null, k ? k.color : '#fff', v.name, v.color, msg.w, !!msg.h);
+    this.hud.addFeed(k ? k.name : null, k ? this.displayColor(k) : '#fff', v.name, this.displayColor(v), msg.w, !!msg.h);
     if (k && k.isLocal) {
       sfx.kill();
       this.hud.notice(`+${MATCH.scoreKill + (msg.h ? MATCH.scoreHeadshotBonus : 0)}  ELIMINATED ${v.name}${msg.h ? ' · HEADSHOT' : ''}`);
       if (STREAKS[k.streak]) { this.hud.announce(STREAKS[k.streak], `${k.streak} kill streak`); sfx.streak(); }
     }
     if (v.isLocal) { this.deathCam = { from: [...v.ms.pos], killer: k ? k.id : null, t: 0 }; }
-    if (this.isHost && this.match.phase === 'play' && k && k.kills >= this.match.killLimit) this._endRound();
+    this.minimap.onDeath(v, msg.p);
+    if (this.mode === 'tdm' && k && this.isEnemy(k, v) && this.match.phase === 'play') this.teamScore[k.team]++;
+    if (this.isHost && this.match.phase === 'play') {
+      if (this.mode === 'ffa' && k && k.kills >= this.match.killLimit) this._endRound();
+      if (this.mode === 'tdm' && k && this.teamScore[k.team] >= this.match.killLimit) this._endRound();
+    }
   }
 
   // ---------------------------------------------------------------- utility
@@ -436,6 +637,7 @@ export class Game {
 
   blinkAction(p, yaw, pitch) {
     if (!p.alive) return;
+    if (this.carrying(p)) { if (p.isLocal) this.hud.notice('NO BLINKING WITH THE FLAG'); return; }
     if (p.blink && !p.blink.dead) { this.teleport(p); return; }
     if (p.blinkCd > 0) return;
     const d = this.forward(yaw, pitch);
@@ -561,10 +763,17 @@ export class Game {
 
   // ---------------------------------------------------------------- match flow (host)
   _endRound() {
-    const ranked = [...this.players.values()].sort((a, b) => b.kills - a.kills || b.score - a.score);
-    const w = ranked[0];
-    if (w) w.wins++;
-    this.match.phase = 'end'; this.match.t = MATCH.intermission; this.match.winner = w ? w.id : null;
+    this.match.winner = null; this.match.winnerTeam = null;
+    if (this.teams) {
+      const t = this.teamScore.A > this.teamScore.B ? 'A' : this.teamScore.B > this.teamScore.A ? 'B' : null;
+      this.match.winnerTeam = t;
+      if (t) for (const p of this.players.values()) if (p.team === t) p.wins++;
+    } else {
+      const ranked = [...this.players.values()].sort((a, b) => b.kills - a.kills || b.score - a.score);
+      const w = ranked[0];
+      if (w) { w.wins++; this.match.winner = w.id; }
+    }
+    this.match.phase = 'end'; this.match.t = MATCH.intermission;
     this._onPhase('end');
     this._sendMatch();
   }
@@ -578,16 +787,27 @@ export class Game {
 
   _onPhase(ph) {
     if (ph === 'warmup') {
-      for (const p of this.players.values()) { p.kills = 0; p.deaths = 0; p.score = 0; p.streak = 0; p.best = 0; }
+      for (const p of this.players.values()) { p.kills = 0; p.deaths = 0; p.score = 0; p.streak = 0; p.best = 0; p.caps = 0; }
+      this.teamScore = { A: 0, B: 0 };
+      if (this.flags) for (const t of ['A', 'B']) { const f = this.flags[t]; f.state = 'home'; f.carrier = null; f.pos = [...this.map.flags[t]]; f.dropT = 0; }
       for (const p of this.players.values()) if (this.simulatedHere(p)) this.spawn(p);
       for (const pr of this.projectiles) pr.dead = true;
       this.effects.clearHoles();
       this.hud.scoreboard(false, []);
     }
-    if (ph === 'play') { sfx.go(); this.hud.announce('FIGHT!', `First to ${this.match.killLimit} kills`); }
+    if (ph === 'play') {
+      sfx.go();
+      const M = MODES[this.mode];
+      this.hud.announce('FIGHT!', this.teams ? `${TEAMS[this.local.team || 'A'].name} · first to ${M.limit} ${M.limitLabel}` : `First to ${M.limit} kills`);
+    }
     if (ph === 'end') {
-      const w = this.players.get(this.match.winner);
-      this.hud.announce(w ? (w.isLocal ? 'YOU WIN THE ROUND!' : `${w.name} WINS`) : 'ROUND OVER', `Round ${this.match.round}`);
+      if (this.teams) {
+        const t = this.match.winnerTeam;
+        this.hud.announce(t ? (t === this.local.team ? 'YOUR TEAM WINS!' : `${TEAMS[t].name} WINS`) : 'DRAW', `Round ${this.match.round}`);
+      } else {
+        const w = this.players.get(this.match.winner);
+        this.hud.announce(w ? (w.isLocal ? 'YOU WIN THE ROUND!' : `${w.name} WINS`) : 'ROUND OVER', `Round ${this.match.round}`);
+      }
     }
   }
 
@@ -597,13 +817,14 @@ export class Game {
     if (m.phase === 'warmup' && m.t <= 0) { m.phase = 'play'; m.t = m.roundTime; this._onPhase('play'); this._sendMatch(); }
     else if (m.phase === 'play' && m.t <= 0) this._endRound();
     else if (m.phase === 'end' && m.t <= 0) this._startWarmup();
+    if (this.mode === 'ctf') this._hostFlags(dt);
     if (this.net && this.time - this.lastMatchSend > 1) this._sendMatch();
   }
 
   _sendMatch() {
     if (!this.net) return;
     this.lastMatchSend = this.time;
-    this.net.send('match', { ph: this.match.phase, t: r2(this.match.t), r: this.match.round, w: this.match.winner, kl: this.match.killLimit, bc: this.botCount, df: this.difficulty });
+    this.net.send('match', { ph: this.match.phase, t: r2(this.match.t), r: this.match.round, w: this.match.winner, wt: this.match.winnerTeam, kl: this.match.killLimit, bc: this.botCount, df: this.difficulty, mp: this.mapId, mo: this.mode, ts: this.teamScore });
   }
 
   // ---------------------------------------------------------------- AFK box + kick
@@ -635,7 +856,7 @@ export class Game {
 
   playerList() {
     return [...this.players.values()].filter(p => !p.isBot).map(p => ({
-      id: p.id, name: p.name, color: p.color, me: p.isLocal, host: p.id === this.hostId, afk: p.afk, ping: p.ping,
+      id: p.id, name: p.name, color: this.displayColor(p), me: p.isLocal, host: p.id === this.hostId, afk: p.afk, ping: p.ping, team: p.team,
     }));
   }
 
@@ -651,11 +872,12 @@ export class Game {
       if (p) this.hud.feedText(`${p.name} left`, '#aaa');
       for (const q of [...this.players.values()]) if (q.id === id || (q.isBot && q.owner === id)) this.removePlayer(q.id);
       this._electHost();
+      if (this.isHost && this.teams) this._balanceTeams();
     });
     net.on('hello', (d, from) => {
       if (this.kicked.has(from)) return;
       let p = this.players.get(from);
-      if (!p) { p = this.addPlayer(from, { name: d.n, color: d.c, owner: from }); this.hud.feedText(`${d.n} joined`, d.c); }
+      if (!p) { p = this.addPlayer(from, { name: d.n, color: d.c, owner: from }); this.hud.feedText(`${d.n} joined`, d.c); if (this.isHost && this.teams) this._balanceTeams(); }
       else if (p.name !== d.n || p.color !== d.c) { p.name = d.n; p.color = d.c; p.avatar.setName(d.n, d.c); }
       p.lastSeen = now();
     });
@@ -674,9 +896,9 @@ export class Game {
     net.on('roster', (d, from) => {
       if (from !== this.hostId) return;
       const ids = new Set();
-      for (const [id, name, color] of d.bots) {
+      for (const [id, name, color, team] of d.bots) {
         ids.add(id);
-        if (!this.players.has(id)) this.addPlayer(id, { name, color, isBot: true, owner: from });
+        if (!this.players.has(id)) this.addPlayer(id, { name, color, isBot: true, owner: from, team: team || null });
       }
       for (const p of [...this.players.values()]) if (p.isBot && p.owner === from && !ids.has(p.id)) this.removePlayer(p.id);
       for (const [id, s] of Object.entries(d.s || {})) {
@@ -684,15 +906,19 @@ export class Game {
         if (!p) continue;
         [p.kills, p.deaths, p.score, p.streak, p.best, p.wins] = s;
         if (!p.isLocal) p.afk = !!s[6];
+        if (s[7] && this.teams) this.setTeam(p, s[7]);
       }
     });
     net.on('match', (d, from) => {
       if (from !== this.hostId) return;
+      if ((d.mp && d.mp !== this.mapId) || (d.mo && d.mo !== this.mode)) this.applyMatchSettings(d.mp || this.mapId, d.mo || this.mode);
       const prev = this.match.phase;
-      this.match.t = d.t; this.match.round = d.r; this.match.winner = d.w; this.match.killLimit = d.kl;
+      this.match.t = d.t; this.match.round = d.r; this.match.winner = d.w; this.match.winnerTeam = d.wt || null; this.match.killLimit = d.kl;
+      if (d.ts) this.teamScore = d.ts;
       this.botCount = d.bc; this.difficulty = d.df;
       if (d.ph !== prev) {
         if (d.ph === 'end' && d.w) { const w = this.players.get(d.w); if (w) w.wins++; }
+        if (d.ph === 'end' && d.wt) for (const p of this.players.values()) if (p.team === d.wt) p.wins++;
         this.match.phase = d.ph; this._onPhase(d.ph);
       }
     });
@@ -749,6 +975,13 @@ export class Game {
       if (p.avatar) p.avatar.melee();
       sfx.swing(this.posOf(p));
     });
+    net.on('flag', (d, from) => {
+      if (from !== this.hostId || !this.flags) return;
+      const f = this.flags[d.t]; if (!f) return;
+      f.state = d.s; f.carrier = d.c || null; if (d.p && d.s !== 'carried') f.pos = d.p;
+      if (d.ev) this._flagEvent(d.t, d.ev, d.by);
+    });
+    net.on('restart', (d, from) => { if (from === this.hostId) this.applyMatchSettings(d.mp, d.mo); });
     net.on('ping', (d, from) => net.send('pong', d, from));
     net.on('pong', (d, from) => { const p = this.players.get(from); if (p) p.ping = Math.round((now() - d) * 1000); });
     this._electHost();
@@ -777,8 +1010,8 @@ export class Game {
     if (!this.net) return;
     this.lastRosterSend = this.time;
     const s = {};
-    for (const p of this.players.values()) s[p.id] = [p.kills, p.deaths, p.score, p.streak, p.best, p.wins, p.afk ? 1 : 0];
-    this.net.send('roster', { bots: this.bots.map(b => [b.p.id, b.p.name, b.p.color]), s });
+    for (const p of this.players.values()) s[p.id] = [p.kills, p.deaths, p.score, p.streak, p.best, p.wins, p.afk ? 1 : 0, p.team || 0];
+    this.net.send('roster', { bots: this.bots.map(b => [b.p.id, b.p.name, b.p.color, b.p.team || 0]), s });
   }
 
   _stateOf(p) {
@@ -892,6 +1125,7 @@ export class Game {
       this.view.recoilYaw *= Math.exp(-dt * 0.6);
     }
     if (pressed.has('KeyH')) { this.helpShown = !this.helpShown; this.helpUntil = Infinity; }
+    if (pressed.has('KeyM')) this.minimap.toggle();
     if (L.afk && (pressed.has('Enter') || pressed.has('NumpadEnter'))) this.requestAfk(L.id, false);
     if (this.net && !L.afk && this.match.phase === 'play' && performance.now() - (this.input.lastInput || performance.now()) > 60000) {
       this.input.lastInput = performance.now();
@@ -981,7 +1215,8 @@ export class Game {
 
     this._updateCamera(dt, mdx, mdy);
     this.effects.update(dt);
-    for (const r of this.map.padRings) { r.position.y = 0.3 + (this.time * 0.8 % 1) * 1.2; r.material.opacity = 0.6 * (1 - (this.time * 0.8 % 1)); }
+    for (const r of this.map.padRings) { r.position.y = (r.userData.baseY || 0.3) + (this.time * 0.8 % 1) * 1.2; r.material.opacity = 0.6 * (1 - (this.time * 0.8 % 1)); }
+    this._updateFlagMeshes(dt);
     this._updateHud(dt, keys);
   }
 
@@ -1095,7 +1330,9 @@ export class Game {
       rank, total: ranked.length, leaderName: top ? top.name : '', leaderKills: top ? top.kills : 0, leaderColor: top ? top.color : '#fff',
       roomCode: this.roomCode, players: [...this.players.values()].filter(p => !p.isBot).length, isHost: this.net && this.isHost,
       bots: this.botCount, difficulty: this.difficulty,
+      modeName: MODES[this.mode].name, teams: this.teams, scoreA: this.teamScore.A, scoreB: this.teamScore.B, myTeam: L.team, mapName: this.map.info.name,
     });
+    h.setFlags(this.flags ? { A: this.flags.A, B: this.flags.B, names: (id) => { const c = this.players.get(id); return c ? c.name : ''; }, mine: L.team } : null);
     h.setAfk(!!L.afk);
     if (!L.alive && this.match.phase !== 'end') {
       const k = L.killedBy && this.players.get(L.killedBy);
@@ -1107,10 +1344,22 @@ export class Game {
     const showSb = keys.has('Tab') || this.match.phase === 'end';
     if (showSb) {
       const w = this.match.winner && this.players.get(this.match.winner);
-      h.scoreboard(true, ranked.map(p => ({ name: p.name, color: p.color, bot: p.isBot, afk: p.afk, host: !!this.net && p.id === this.hostId, score: p.score, kills: p.kills, deaths: p.deaths, best: p.best, wins: p.wins, me: p.isLocal, ping: p.isLocal ? '' : p.isBot ? 'BOT' : (p.ping ? p.ping + 'ms' : '') })),
-        this.match.phase === 'end' ? (w ? `${w.name.toUpperCase()} WINS ROUND ${this.match.round}` : 'ROUND OVER') : `ROUND ${this.match.round} · FREE FOR ALL · ${this.net ? 'ONLINE ' + this.roomCode : 'OFFLINE'}`,
+      const row = (p) => ({ name: p.name, color: this.displayColor(p), bot: p.isBot, afk: p.afk, host: !!this.net && p.id === this.hostId, score: p.score, kills: p.kills, deaths: p.deaths, best: p.best, wins: p.wins, caps: p.caps || 0, me: p.isLocal, ping: p.isLocal ? '' : p.isBot ? 'BOT' : (p.ping ? p.ping + 'ms' : '') });
+      let rows;
+      if (this.teams) {
+        rows = [];
+        for (const t of ['A', 'B']) {
+          rows.push({ header: true, label: TEAMS[t].name, color: TEAMS[t].color, score: this.teamScore[t], mine: L.team === t });
+          rows.push(...ranked.filter(p => p.team === t).map(row));
+        }
+      } else rows = ranked.map(row);
+      const wt = this.match.winnerTeam;
+      const endTitle = this.teams ? (wt ? `${TEAMS[wt].name} WINS ROUND ${this.match.round}` : 'DRAW') : (w ? `${w.name.toUpperCase()} WINS ROUND ${this.match.round}` : 'ROUND OVER');
+      h.scoreboard(true, rows,
+        this.match.phase === 'end' ? endTitle : `ROUND ${this.match.round} · ${MODES[this.mode].name} · ${this.map.info.name} · ${this.net ? 'ONLINE ' + this.roomCode : 'OFFLINE'}`,
         this.match.phase === 'end' ? `NEXT ROUND IN ${Math.max(0, Math.ceil(this.match.t))}S` : 'HOLD TAB');
     } else h.scoreboard(false, []);
+    this.minimap.update(dt);
     h.update(dt);
   }
 
@@ -1125,6 +1374,7 @@ export class Game {
   }
 
   dispose() {
+    if (this.minimap) this.minimap.toggle(false);
     if (this.net) this.net.leave();
     this.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   }

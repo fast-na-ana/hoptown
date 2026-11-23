@@ -138,10 +138,16 @@ export class Hud {
     this.hitT = kill ? 0.35 : 0.16;
   }
 
-  setMatch({ timeLeft, round, phase, myKills, killLimit, rank, total, leaderName, leaderKills, leaderColor, roomCode, players, isHost, bots, difficulty }) {
+  setMatch({ timeLeft, round, phase, myKills, killLimit, rank, total, leaderName, leaderKills, leaderColor, roomCode, players, isHost, bots, difficulty, modeName, teams, scoreA, scoreB, myTeam, mapName }) {
     const m = Math.max(0, Math.floor(timeLeft / 60)), s = Math.max(0, Math.floor(timeLeft % 60));
     this._set('m-round', 'text', `ROUND ${round}`);
-    this._set('m-phase', 'text', phase === 'warmup' ? 'GET READY' : phase === 'end' ? 'ROUND OVER' : 'FREE FOR ALL');
+    this._set('m-phase', 'text', phase === 'warmup' ? 'GET READY' : phase === 'end' ? 'ROUND OVER' : (modeName || 'FREE FOR ALL'));
+    this._cls($('match'), 'teams', !!teams);
+    if (teams) {
+      const tot = Math.max(1, killLimit);
+      this._set('m-teams', 'html', `<div class="tm A${myTeam === 'A' ? ' me' : ''}"><span>EMBER</span><b>${scoreA}</b></div><div class="tlim">/${killLimit}</div><div class="tm B${myTeam === 'B' ? ' me' : ''}"><b>${scoreB}</b><span>TIDE</span></div>`
+        + `<div class="tbar"><i class="A" style="width:${Math.min(50, scoreA / tot * 50)}%"></i><i class="B" style="width:${Math.min(50, scoreB / tot * 50)}%"></i></div>`);
+    }
     this._set('timer', 'text', phase === 'end' ? '--:--' : `${m}:${String(s).padStart(2, '0')}`);
     this._set('m-kills', 'text', String(myKills));
     this._set('m-goal', 'text', String(killLimit));
@@ -151,6 +157,18 @@ export class Hud {
     this._set('room-pill', 'html', roomCode
       ? `<span class="live"></span><b>ONLINE</b> ROOM ${esc(roomCode)} · ${players} PLAYER${players === 1 ? '' : 'S'}${isHost ? ' · HOST' : ''}`
       : `<span class="off"></span><b>OFFLINE</b> ${bots} BOT${bots === 1 ? '' : 'S'} · ${String(difficulty).toUpperCase()}`);
+  }
+
+  setFlags(f) {
+    const el = $('flagbar');
+    if (!f) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    const chip = (t, name) => {
+      const s = f[t].state;
+      const who = s === 'carried' ? f.names(f[t].carrier) : '';
+      return `<div class="fchip ${t} ${s}${f.mine === t ? ' mine' : ''}"><i></i><b>${name}</b><span>${s === 'home' ? 'HOME' : s === 'carried' ? 'TAKEN · ' + esc(who) : 'DROPPED'}</span></div>`;
+    };
+    this._set('flagbar', 'html', chip('A', 'EMBER FLAG') + chip('B', 'TIDE FLAG'));
   }
 
   setStreak(n) {
@@ -223,8 +241,11 @@ export class Hud {
     if (!show) return;
     this._set('sb-title', 'text', title);
     this._set('sb-footer', 'text', footer);
-    this._set('sb-body', 'html', rows.map((r, i) => `<tr class="${r.me ? 'me' : ''}">
-      <td class="rk">${i + 1}</td><td><span class="dot" style="background:${r.color}"></span>${esc(r.name)}${r.bot ? ' <i class="tagbot">BOT</i>' : ''}${r.host ? ' <i class="tagbot host">HOST</i>' : ''}${r.afk ? ' <i class="tagbot afk">AFK</i>' : ''}</td>
+    let rank = 0;
+    this._set('sb-body', 'html', rows.map((r) => r.header
+      ? `<tr class="team-h"><td colspan="8"><span class="dot" style="background:${r.color}"></span>${esc(r.label)}${r.mine ? ' <i class="tagbot host">YOUR TEAM</i>' : ''}<b>${r.score}</b></td></tr>`
+      : `<tr class="${r.me ? 'me' : ''}">
+      <td class="rk">${++rank}</td><td><span class="dot" style="background:${r.color}"></span>${esc(r.name)}${r.bot ? ' <i class="tagbot">BOT</i>' : ''}${r.host ? ' <i class="tagbot host">HOST</i>' : ''}${r.afk ? ' <i class="tagbot afk">AFK</i>' : ''}</td>
       <td>${r.score}</td><td>${r.kills}</td><td>${r.deaths}</td><td>${r.best}</td><td>${r.wins}</td><td class="ping">${r.ping ?? ''}</td></tr>`).join(''));
   }
   update(dt) {

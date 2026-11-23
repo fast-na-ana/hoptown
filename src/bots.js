@@ -2,6 +2,7 @@
 // strafing, jumping, sliding and the occasional grenade.
 import { stepMovement, emptyInput } from './movement.js';
 import { WEAPONS } from './config.js';
+import { other } from './modes.js';
 
 export const BOT_NAMES = ['Sprocket', 'Rivet', 'Nova', 'Bolt', 'Pixel', 'Ziggy', 'Comet', 'Gizmo', 'Blitz', 'Orbit', 'Turbo', 'Echo'];
 
@@ -22,6 +23,8 @@ export class Bot {
   constructor(game, p, difficulty = 'normal') {
     this.g = game; this.p = p; this.d = DIFF[difficulty] || DIFF.medium;
     this.burstT = 0; this.pauseT = 0; this.role = 'rifle';
+    this.ctfRole = Math.random() < 0.65 ? 'attack' : 'defend';
+    this.objT = 0;
     this.path = []; this.pi = 0; this.target = null; this.lastSeen = null; this.lastSeenT = -99;
     this.reactUntil = 0; this.strafe = 1; this.strafeT = 0; this.err = [0, 0];
     this.nextThink = 0; this.stuckT = 0; this.checkPos = [0, 0, 0]; this.checkT = 0;
@@ -76,7 +79,7 @@ export class Bot {
   }
 
   wander() {
-    const enemies = [...this.g.players.values()].filter(o => o !== this.p && o.alive && !o.afk);
+    const enemies = [...this.g.players.values()].filter(o => o !== this.p && o.alive && !o.afk && this.g.isEnemy(this.p, o));
     if (enemies.length && Math.random() < 0.55) {
       const e = enemies[Math.floor(Math.random() * enemies.length)];
       const ep = this.g.posOf(e);
@@ -86,6 +89,25 @@ export class Bot {
       const n = nodes[Math.floor(Math.random() * nodes.length)];
       this.goTo(n.p);
     }
+  }
+
+  // CTF: where should this bot be heading?
+  objective() {
+    const g = this.g;
+    if (g.mode !== 'ctf' || !g.flags || !this.p.team) return null;
+    const my = this.p.team, en = other(my);
+    if (g.carrying(this.p)) return { pos: g.map.flags[my], urgent: true };
+    const of = g.flags[my], ef = g.flags[en];
+    if (of.state === 'carried') { const c = g.players.get(of.carrier); if (c) return { pos: [...g.posOf(c)], urgent: true }; }
+    if (of.state === 'dropped') return { pos: of.pos, urgent: true };
+    if (this.ctfRole === 'defend') {
+      const b = g.map.flags[my];
+      const near = g.map.nav.nodes.filter(n => Math.hypot(n.p[0] - b[0], n.p[2] - b[2]) < 11 && Math.abs(n.p[1] - b[1]) < 1);
+      const n = near.length ? near[Math.floor(Math.random() * near.length)] : null;
+      return { pos: n ? n.p : b, urgent: false, idle: true };
+    }
+    if (ef.state === 'carried') { const c = g.players.get(ef.carrier); if (c && c !== this.p) return { pos: [...g.posOf(c)], urgent: false }; }
+    return { pos: ef.pos, urgent: false };
   }
 
   onHurt(attackerId) {
@@ -103,7 +125,7 @@ export class Bot {
     const eye = this.g.eyeOf(p);
     let best = null, bestD = Infinity;
     for (const o of this.g.players.values()) {
-      if (o === p || !o.alive || o.afk) continue;
+      if (o === p || !o.alive || o.afk || !this.g.isEnemy(p, o)) continue;
       if (this.g.match.phase === 'warmup') continue;
       const op = this.g.posOf(o);
       const d = Math.hypot(op[0] - eye[0], op[1] - eye[1], op[2] - eye[2]);
@@ -126,16 +148,24 @@ export class Bot {
       const bp = this.g.posOf(best);
       this.lastSeen = [...bp]; this.lastSeenT = t;
       const dist = bestD;
-      if (dist > 22 && (!this.path.length || this.pi >= this.path.length || Math.random() < 0.1)) this.goTo(bp);
+      if (!this.urgent && dist > 22 && (!this.path.length || this.pi >= this.path.length || Math.random() < 0.1)) this.goTo(bp);
       // grenade
       if (this.p.nades > 0 && t > this.nextNade && dist > 9 && dist < 26 && Math.random() < this.d.nade) {
         this.nextNade = t + 6;
         const dx = bp[0] - eye[0], dz = bp[2] - eye[2], dh = Math.hypot(dx, dz);
         this.g.throwGrenade(p, Math.atan2(-dx, -dz), Math.min(0.7, 0.18 + dh * 0.012));
       }
-    } else if (this.lastSeen && t - this.lastSeenT < 5) {
+    }
+    const obj = this.objective();
+    this.urgent = !!(obj && obj.urgent);
+    if (obj && (!best || obj.urgent)) {
+      const end = this.path.length ? this.path[this.path.length - 1] : null;
+      const moved = !end || Math.hypot(end[0] - obj.pos[0], end[2] - obj.pos[2]) > 4;
+      const done = !this.path.length || this.pi >= this.path.length;
+      if ((moved && !obj.idle) || (done && (!obj.idle || t > this.objT))) { this.goTo(obj.pos); this.objT = t + 3 + Math.random() * 4; }
+    } else if (!best && this.lastSeen && t - this.lastSeenT < 5) {
       if (!this.path.length || this.pi >= this.path.length) this.goTo(this.lastSeen);
-    } else if (!this.path.length || this.pi >= this.path.length) {
+    } else if (!best && (!this.path.length || this.pi >= this.path.length)) {
       this.wander();
     }
   }
@@ -174,7 +204,7 @@ export class Bot {
       this.strafeT -= dt;
       if (this.strafeT <= 0) { this.strafe = Math.random() < 0.5 ? -1 : 1; this.strafeT = 0.4 + Math.random() * 0.9; if (Math.random() < 0.18 * this.d.strafe) this.wantJump = true; }
       const dist = Math.hypot(dx, dy, dz);
-      if (dist < 22 || !wp) {
+      if ((dist < 22 || !wp) && !(this.urgent && wp)) {
         moveYaw = Math.atan2(-dx, -dz);
         fwd = dist > 12 ? 0.6 : dist < 5 ? -0.6 : 0;
         right = this.strafe * this.d.strafe;

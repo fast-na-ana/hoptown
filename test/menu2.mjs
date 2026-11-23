@@ -1,0 +1,10 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({executablePath:'/usr/bin/google-chrome',headless:'new',args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const p = await b.newPage(); await p.setViewport({width:1366,height:860});
+const errs=[]; p.on('pageerror', e => errs.push(e.message));
+await p.goto('http://localhost:8123/index.html?test', {waitUntil:'load'});
+await p.evaluate(() => { document.querySelector('#map-sel [data-map="sunstone"]').click(); document.querySelector('#mode-seg [data-m="ctf"]').click(); });
+await new Promise(r=>setTimeout(r,4000));
+await p.screenshot({path:'test/shots/menu-maps.png'});
+console.log('ERR', errs);
+await b.close();
