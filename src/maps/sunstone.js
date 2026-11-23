@@ -20,8 +20,34 @@ export function build(world, scene) {
     else { B.visual([t - 0.06, y0, a - 0.45], [t, y1, a - 0.05], 'blueTrim'); B.visual([t - 0.06, y0, b + 0.05], [t, y1, b + 0.45], 'blueTrim'); }
   }
 
+  // pennant string along x or z at height y (visual only)
+  function bunting(axis, t, a, b, y, cols) {
+    if (axis === 'x') B.visual([a, y - 0.03, t - 0.02], [b, y, t + 0.02], 'rope');
+    else B.visual([t - 0.02, y - 0.03, a], [t + 0.02, y, b], 'rope');
+    let i = 0;
+    for (let s = a + 0.4; s < b - 0.3; s += 0.75, i++) {
+      const m = cols[i % cols.length], sag = 0.12 * Math.sin(Math.PI * (s - a) / (b - a));
+      if (axis === 'x') B.visual([s, y - 0.42 - sag, t - 0.015], [s + 0.32, y - 0.03 - sag, t + 0.015], m);
+      else B.visual([t - 0.015, y - 0.42 - sag, s], [t + 0.015, y - 0.03 - sag, s + 0.32], m);
+    }
+  }
+  // wooden frame around a doorway; `face` is the wall surface, `out` = +1/-1 normal direction
+  function frame(axis, face, a, b, top, out) {
+    const f0 = out > 0 ? face : face - 0.08, f1 = out > 0 ? face + 0.08 : face;
+    if (axis === 'x') { B.visual([a - 0.16, 0, f0], [a, top + 0.16, f1], 'wood'); B.visual([b, 0, f0], [b + 0.16, top + 0.16, f1], 'wood'); B.visual([a - 0.16, top, f0], [b + 0.16, top + 0.16, f1], 'wood'); }
+    else { B.visual([f0, 0, a - 0.16], [f1, top + 0.16, a], 'wood'); B.visual([f0, 0, b], [f1, top + 0.16, b + 0.16], 'wood'); B.visual([f0, top, a - 0.16], [f1, top + 0.16, b + 0.16], 'wood'); }
+  }
+  // protruding roof beams along a wall face
+  function vigas(face, out, x0, x1, y) { for (let x = x0 + 0.5; x < x1 - 0.3; x += 1.4) B.visual([x, y, out > 0 ? face : face - 0.45], [x + 0.2, y + 0.2, out > 0 ? face + 0.45 : face], 'wood'); }
+  function pots(x, z) {
+    B.box([x, 0, z], [x + 0.55, 0.7, z + 0.55], 'terracotta');
+    B.visual([x + 0.12, 0.7, z + 0.12], [x + 0.43, 0.85, z + 0.43], 'terracotta');
+    B.box([x + 0.65, 0, z + 0.1], [x + 1.05, 0.5, z + 0.5], 'terracotta');
+  }
+
   function side(rot, wallMat) {
     B.rot = rot;
+    const team = rot === 0 ? 'stripeA' : 'stripeB';
     // ---------------- base (team spawn + flag) ----------------
     B.visual([-46, 0, -12], [-34.6, 0.02, 12], 'tile');
     wall('z', -34.6, -34, -12.6, 12.6, 0, 4.2, [[-2.5, 2.5, 0, 3.4]], 'sandstoneDark', null);
@@ -119,6 +145,38 @@ export function build(world, scene) {
     B.box([-44, 0, -20], [-40, 2.2, -19.4], 'sandstoneDark');
     B.box([-38, 0, -24], [-37.4, 1.6, -21], 'sandstoneDark');
     K.palm([-43, 0, -23.5]);
+
+    // ---------------- dressing: bunting, door frames, beams, lamps, goods, roof clutter ----------------
+    bunting('z', -26, -5.5, 5.5, 4.1, ['canvasRed', 'orange', 'canvasBlue', 'cream']);
+    bunting('z', -14, -5.5, 5.5, 4.3, [team, 'cream', 'orange']);
+    bunting('x', -14.1, -29.7, -6.3, 3.75, ['canvasBlue', 'cream', 'canvasRed']);
+    bunting('x', 7, -8, 8, 4.15, ['orange', team, 'cream', 'canvasBlue']);
+    for (let x = -7.2; x < 8; x += 2.4) B.visual([x - 0.1, 3.75, 6.9], [x + 0.1, 3.95, 7.1], 'lamp');
+    frame('x', 5.5, -12, -10.6, 2.5, -1); frame('x', 5.5, -29, -27.6, 2.5, -1);
+    frame('x', -5.5, -30, -28.6, 2.5, 1); frame('x', -5.5, -15, -13.6, 2.6, 1);
+    frame('z', -34, -2.5, 2.5, 3.4, 1);
+    vigas(5.5, -1, -32, -23, 3.15); vigas(5.5, -1, -20, -8, 6.35); vigas(5.5, -1, -20, -8, 3.2);
+    vigas(-5.5, 1, -32, -25, 3.15); vigas(-5.5, 1, -22, -8, 3.95);
+    for (const [x, z] of [[-30.2, 5.4], [-12.8, 5.4], [-26.4, -5.4], [-15.9, -5.4]]) B.visual([x, 2.6, z - 0.1], [x + 0.25, 3.0, z + 0.1], 'lamp');
+    B.visual([-34.66, 0.9, 4.2], [-34.6, 3.1, 6.4], 'canvasBlue'); B.visual([-34.66, 0.9, -6.4], [-34.6, 3.1, -4.2], 'canvasRed');
+    B.visual([-34.68, 1.3, 4.6], [-34.64, 2.7, 6.0], 'cream');
+    // market goods on the stalls and along the walls
+    for (const [x, z] of [[-26, -18.2], [-20, -16.2], [-14, -19.6], [-9, -17.4]]) {
+      B.visual([x - 0.85, 0.95, z - 0.4], [x - 0.25, 1.2, z + 0.4], 'orange');
+      B.visual([x - 0.15, 0.95, z - 0.4], [x + 0.35, 1.15, z + 0.4], 'veg');
+      B.visual([x + 0.45, 0.95, z - 0.35], [x + 0.85, 1.35, z + 0.05], 'terracotta');
+    }
+    pots(-29.4, -25.6); pots(-12.6, -25.6); pots(-44.9, 12.2); pots(-21.3, 25.0);
+    B.box([-7.4, 0, 24.6], [-6.2, 0.6, 25.6], 'wood'); B.visual([-7.3, 0.6, 24.7], [-6.3, 0.85, 25.5], 'veg');
+    // roof clutter
+    B.box([-31.4, R1, 6.2], [-30.2, R1 + 1.5, 7.4], 'steel'); B.visual([-31.5, R1 + 1.5, 6.1], [-30.1, R1 + 1.6, 7.5], 'dark');
+    for (const x of [-31.5, -28.9]) B.visual([x, R1, 10.75], [x + 0.08, R1 + 1.7, 10.85], 'wood');
+    B.visual([-31.5, R1 + 1.62, 10.77], [-28.82, R1 + 1.65, 10.83], 'rope');
+    B.visual([-31.1, R1 + 0.7, 10.78], [-30.2, R1 + 1.62, 10.82], 'cloth'); B.visual([-29.9, R1 + 0.85, 10.78], [-29.2, R1 + 1.62, 10.82], team);
+    B.visual([-19, H2 + 0.2, 6.4], [-17.6, H2 + 1.6, 7.8], 'steel'); B.visual([-12, H2 + 0.2, 10], [-10.4, H2 + 0.7, 11.2], 'metal');
+    B.visual([-31, 3.8, -11], [-29.6, 5.1, -9.6], 'steel'); B.visual([-27.6, 3.8, -7.4], [-26.4, 4.3, -6.6], 'metal');
+    B.visual([-20.5, 4.6, -11], [-18.5, 5.2, -9.8], 'metal'); B.visual([-11, 4.6, -7.4], [-9.6, 5.9, -6.0], 'steel');
+    B.visual([-29.5, 4.25, -21.5], [-27.5, 4.7, -20.3], 'crate'); B.visual([-12.5, 4.25, -15.6], [-11.2, 4.9, -14.6], 'crate');
   }
 
   B.rot = 0;
@@ -143,8 +201,16 @@ export function build(world, scene) {
   }
   B.box([-2, 0, 18], [2, 1.1, 18.6], 'sandstone'); B.box([-2, 0, -18.6], [2, 1.1, -18], 'sandstone');
 
+  // perimeter cap + buttresses, desert town and dunes beyond the walls
+  for (const sz of [-1, 1]) {
+    B.visual([-46.6, 6, sz > 0 ? 25.85 : -26.45], [46.6, 6.3, sz > 0 ? 26.45 : -25.85], 'sandstone');
+    for (const x of [-40, -32, -24, -8, 8, 24, 32, 40]) B.box([x - 0.45, 0, sz > 0 ? 25.55 : -26], [x + 0.45, 5.4, sz > 0 ? 26 : -25.55], 'sandstone');
+  }
+  for (const sx of [-1, 1]) B.visual([sx > 0 ? 45.85 : -46.45, 6, -26.4], [sx > 0 ? 46.45 : -45.85, 6.3, 26.4], 'sandstone');
+  K.scenery({ ix: 47, iz: 27, ground: 'sand', bodies: ['sandstone', 'plaster', 'ochre', 'sandstoneDark'], roof: 'sandstoneDark', window: 'dark', trees: false, palmsToo: true, flatRoof: true, tall: true, domes: true, hillsAt: 120, seed: 23 });
+
   const afkSpawns = K.afkBox(60);
-  const { group, padRings } = K.finalize(scene, { leaf: '#5d9a3f' });
+  const { group, padRings } = K.finalize(scene, { leaf: '#5d9a3f', hill: '#d9b77e', dome: '#e8d7b5' });
 
   const spawns = mirrorList([
     [-38, 0, -6], [-38, 0, 6], [-28.5, 0, 8.7], [-14, 3.6, 8.5], [-30, 0, 20], [-17.5, 2.6, 23.5],

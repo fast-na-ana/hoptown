@@ -74,7 +74,7 @@ export const KNIFE = {
 };
 
 export const GRENADE = {
-  max: 2, rechargeTime: 11, fuse: 1.5, throwSpeed: 19, upBoost: 4, radius: 8.5,
+  max: 2, rechargeTime: 11, fuse: 1.5, throwSpeed: 19, upBoost: 4, radius: 6.8,
   maxDamage: 175, minFrac: 0.45, selfDamageMul: 0.5, restitution: 0.38, gravity: 19,
 };
 

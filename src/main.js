@@ -6,7 +6,7 @@ import { COLORS } from './config.js';
 import { DIFFICULTIES } from './bots.js';
 import { MenuPreview } from './preview.js';
 import { MAP_LIST } from './maps/index.js';
-import { MODES } from './modes.js';
+import { MODES, RULE_OPTIONS, defaultRules, resolveRules, fmtTime, fmtLimit } from './modes.js';
 import { stepMovement, makeMoveState, emptyInput } from './movement.js';
 
 const $ = (id) => document.getElementById(id);
@@ -80,6 +80,36 @@ $('map-sel').innerHTML = MAP_LIST.map((m, i) => `<button type="button" class="ma
 $('pause-map-seg').classList.add('seg2');
 $('pause-map-seg').innerHTML = MAP_LIST.map(m => `<button type="button" data-map="${m.id}">${m.name}</button>`).join('');
 let pMap = selMap, pMode = selMode;
+// ---- match rules (time / score / respawn), remembered per mode
+const savedRules = store.get('rules', {});
+const rulesFor = (mode) => resolveRules(mode, savedRules[mode]);
+let pRules = rulesFor(selMode);
+const RULE_ROWS = [
+  { k: 'time', label: 'TIME LIMIT', list: () => RULE_OPTIONS.time, fmt: (v) => fmtTime(v) },
+  { k: 'limit', label: 'SCORE LIMIT', list: (mode) => RULE_OPTIONS.limit[mode], fmt: (v, mode) => fmtLimit(mode, v) },
+  { k: 'respawn', label: 'RESPAWN', list: () => RULE_OPTIONS.respawn, fmt: (v) => `${v} SEC` },
+];
+function paintRules(el, mode, rules) {
+  const def = defaultRules(mode);
+  el.innerHTML = RULE_ROWS.map(r => {
+    const list = r.list(mode), i = list.indexOf(rules[r.k]);
+    return `<div class="step${rules[r.k] !== def[r.k] ? ' custom' : ''}"><small>${r.label}</small><button type="button" data-k="${r.k}" data-d="-1"${i <= 0 ? ' disabled' : ''}>−</button><b>${r.fmt(rules[r.k], mode)}</b><button type="button" data-k="${r.k}" data-d="1"${i >= list.length - 1 ? ' disabled' : ''}>+</button></div>`;
+  }).join('');
+}
+function stepRule(rules, mode, k, d) {
+  const list = RULE_ROWS.find(r => r.k === k).list(mode);
+  const i = Math.max(0, Math.min(list.length - 1, list.indexOf(rules[k]) + d));
+  rules[k] = list[i];
+}
+$('rules').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  const r = rulesFor(selMode); stepRule(r, selMode, b.dataset.k, +b.dataset.d);
+  savedRules[selMode] = r; store.set('rules', savedRules); paintSel();
+});
+$('pause-rules').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  stepRule(pRules, pMode, b.dataset.k, +b.dataset.d); paintSel();
+});
 function paintSel() {
   document.querySelectorAll('#map-sel .mapbtn').forEach(b => b.classList.toggle('on', b.dataset.map === selMap));
   document.querySelectorAll('#mode-seg button').forEach(b => b.classList.toggle('on', b.dataset.m === selMode));
@@ -88,15 +118,18 @@ function paintSel() {
   $('mode-blurb').textContent = `${MODES[selMode].name}: ${MODES[selMode].blurb} ${MAP_LIST[mi].blurb}`;
   document.querySelectorAll('#pause-map-seg button').forEach(b => b.classList.toggle('on', b.dataset.map === pMap));
   document.querySelectorAll('#pause-mode-seg button').forEach(b => b.classList.toggle('on', b.dataset.m === pMode));
+  paintRules($('rules'), selMode, rulesFor(selMode));
+  paintRules($('pause-rules'), pMode, pRules);
 }
 $('map-sel').addEventListener('click', (e) => { const b = e.target.closest('.mapbtn'); if (!b) return; selMap = b.dataset.map; store.set('map', selMap); paintSel(); preview.setMap(selMap); });
 $('mode-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; selMode = b.dataset.m; store.set('mode', selMode); paintSel(); });
 $('pause-map-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; pMap = b.dataset.map; paintSel(); });
-$('pause-mode-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; pMode = b.dataset.m; paintSel(); });
+$('pause-mode-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; if (pMode !== b.dataset.m) { pMode = b.dataset.m; pRules = rulesFor(pMode); } paintSel(); });
 $('apply-match').onclick = () => {
   if (!game || !game.isHost) return;
-  game.applyMatchSettings(pMap, pMode, true);
-  selMap = pMap; selMode = pMode; store.set('map', selMap); store.set('mode', selMode); paintSel();
+  game.applyMatchSettings(pMap, pMode, true, { ...pRules });
+  selMap = pMap; selMode = pMode; store.set('map', selMap); store.set('mode', selMode);
+  savedRules[pMode] = { ...pRules }; store.set('rules', savedRules); paintSel();
   $('pause').style.display = 'none'; lock();
 };
 
@@ -127,7 +160,7 @@ function commonOpts() {
   store.set('name', name);
   store.set('bots', +$('bots').value);
   store.set('difficulty', DIFFICULTIES[diffIdx]);
-  return { name, color, settings, bots: +$('bots').value, difficulty: DIFFICULTIES[diffIdx], map: selMap, mode: selMode };
+  return { name, color, settings, bots: +$('bots').value, difficulty: DIFFICULTIES[diffIdx], map: selMap, mode: selMode, rules: rulesFor(selMode) };
 }
 
 function randRoom() { return Math.random().toString(36).slice(2, 7).toUpperCase(); }
@@ -217,9 +250,9 @@ function renderPause() {
   $('pause-online').style.display = online ? '' : 'none';
   $('pause-bots-row').style.display = host ? '' : 'none';
   $('pause-match').style.display = host ? '' : 'none';
-  if (!$('pause')._painted) { pMap = game.mapId; pMode = game.mode; paintSel(); $('pause')._painted = true; }
+  if (!$('pause')._painted) { pMap = game.mapId; pMode = game.mode; pRules = { ...game.rules }; paintSel(); $('pause')._painted = true; }
   $('bots-readonly').style.display = host ? 'none' : '';
-  $('bots-readonly').textContent = host ? '' : `${game.map.info.name} · ${MODES[game.mode].short} · BOTS ${game.botCount} · ${DIFF_NAMES[Math.max(0, DIFFICULTIES.indexOf(game.difficulty))]} (set by host)`;
+  $('bots-readonly').textContent = host ? '' : `${game.map.info.name} · ${MODES[game.mode].short} · BOTS ${game.botCount} · ${DIFF_NAMES[Math.max(0, DIFFICULTIES.indexOf(game.difficulty))]} · ${fmtTime(game.rules.time)} · ${fmtLimit(game.mode, game.rules.limit)} · RESPAWN ${game.rules.respawn}s (set by host)`;
   $('quit').textContent = online ? 'LEAVE ROOM' : 'QUIT TO MENU';
   if (online) {
     const rows = game.playerList();
@@ -282,7 +315,9 @@ function frame(t) {
   lastRaf = performance.now();
   fpsFrames++; worst = Math.max(worst, t - last);
   if (t - fpsT > 500) { if (settings.showFps && game) $('fps').textContent = `${Math.round(fpsFrames * 1000 / (t - fpsT))} FPS · ${worst.toFixed(0)}ms`; fpsFrames = 0; fpsT = t; worst = 0; }
-  const dt = Math.min(0.1, (t - last) / 1000); last = t;
+  // rAF timestamps can trail performance.now() used by the fallback timer, so clamp at 0
+  const now = performance.now();
+  const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now;
   if (!game) return;
   game.update(dt);
   game.render();
@@ -293,7 +328,7 @@ requestAnimationFrame(frame);
 setInterval(() => {
   const n = performance.now();
   if (!game || n - lastRaf < 150) return;
-  const dt = Math.min(0.1, (n - last) / 1000); last = n;
+  const dt = Math.max(0, Math.min(0.1, (n - last) / 1000)); last = n;
   game.update(dt);
 }, 50);
 

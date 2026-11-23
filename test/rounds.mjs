@@ -4,11 +4,11 @@ const errs = [];
 const p = await b.newPage(); await p.setViewport({width:1280,height:720});
 p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type()==='error') errs.push(m.text()); });
 await p.goto('http://localhost:8123/index.html?test', {waitUntil:'load'});
-await p.evaluate(() => { document.getElementById('bots').value = 6; document.getElementById('difficulty').value = 2; document.getElementById('difficulty').oninput(); window.__start('offline'); });
+await p.evaluate(() => { document.getElementById('bots').value = 4; document.querySelector('#mode-seg [data-m="ffa"]').click(); window.__start('offline'); });
 const r = await p.evaluate(async () => {
   const g = window.__hoptown.game;
   const wait = async (sec) => { const t0 = g.time; while (g.time - t0 < sec) await new Promise(r=>setTimeout(r,16)); };
-  g.match.killLimit = 4; g.local.protectUntil = 1e9; // player invulnerable spectator-ish: keep him safe
+  g.match.killLimit = 2; g.local.protectUntil = 1e9; // player invulnerable spectator-ish: keep him safe
   g.local.ms.pos = [-12, 6.5, -15.5];
   const log = [];
   let lastPhase = '';

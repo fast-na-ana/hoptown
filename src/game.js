@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { SIM_DT, PLAYER, MOVE, WEAPONS, GRENADE, BLINK, MATCH, STREAKS, COLORS, KNIFE } from './config.js';
 import { World, rayBox } from './physics.js';
 import { buildMap } from './maps/index.js';
-import { MODES, TEAMS, FLAG, other } from './modes.js';
+import { MODES, TEAMS, FLAG, other, resolveRules } from './modes.js';
 import { Minimap } from './minimap.js';
 import { makeMoveState, emptyInput, stepMovement, findFreeSpot } from './movement.js';
 import { Avatar } from './avatar.js';
@@ -38,7 +38,8 @@ export class Game {
     this.mapId = opts.map || 'maple';
     this.mode = MODES[opts.mode] ? opts.mode : 'ffa';
     this.teamScore = { A: 0, B: 0 };
-    this.match = { phase: 'warmup', t: MATCH.warmup, round: 1, winner: null, winnerTeam: null, killLimit: MODES[this.mode].limit, roundTime: MODES[this.mode].time };
+    this.rules = resolveRules(this.mode, opts.rules);
+    this.match = { phase: 'warmup', t: MATCH.warmup, round: 1, winner: null, winnerTeam: null, killLimit: this.rules.limit, roundTime: this.rules.time };
     this.lastMatchSend = 0; this.lastStateSend = 0; this.lastRosterSend = 0;
     this.kicked = new Set();
     this.paused = false;
@@ -206,7 +207,7 @@ export class Game {
           this.teamScore[c.team]++; c.score += FLAG.scoreCapture; c.caps = (c.caps || 0) + 1;
           this._setFlag(t, 'home', base, null, 'capture', c.id);
           this._sendMatch();
-          if (this.teamScore[c.team] >= this.match.killLimit) this._endRound();
+          if (this.match.killLimit && this.teamScore[c.team] >= this.match.killLimit) this._endRound();
         }
         continue;
       }
@@ -239,9 +240,11 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- map / mode switching
-  applyMatchSettings(mapId, mode, broadcast = false) {
+  applyMatchSettings(mapId, mode, broadcast = false, rules = null) {
     const mapChanged = mapId !== this.mapId;
+    const modeChanged = mode !== this.mode;
     this.mapId = mapId; this.mode = MODES[mode] ? mode : 'ffa';
+    if (rules || modeChanged) this.rules = resolveRules(this.mode, rules);
     if (mapChanged) {
       this.scene.remove(this.map.group);
       this.map.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); });
@@ -254,13 +257,13 @@ export class Game {
     for (const b of this.bots) { b.path = []; b.pi = 0; b.target = null; }
     this._initFlags();
     this.teamScore = { A: 0, B: 0 };
-    this.match.killLimit = MODES[this.mode].limit; this.match.roundTime = MODES[this.mode].time;
+    this.match.killLimit = this.rules.limit; this.match.roundTime = this.rules.time;
     this.match.phase = 'warmup'; this.match.t = MATCH.warmup; this.match.round = 1; this.match.winner = null; this.match.winnerTeam = null;
     for (const p of this.players.values()) { p.wins = 0; if (!this.teams) this.setTeamNull(p); }
     if (this.teams) { if (!this.net) { if (!this.local.team) this.setTeam(this.local, 'A'); for (const b of this.bots) if (!b.p.team) this.setTeam(b.p, this._pickTeam(b.p)); } this._balanceTeams(); }
     this._onPhase('warmup');
     this.hud.announce(`${MODES[this.mode].name}`, `${this.map.info.name} · ${MODES[this.mode].blurb}`);
-    if (broadcast && this.net && this.isHost) { this.net.send('restart', { mp: this.mapId, mo: this.mode }); this._sendMatch(); }
+    if (broadcast && this.net && this.isHost) { this.net.send('restart', { mp: this.mapId, mo: this.mode, ru: this.rules }); this._sendMatch(); }
   }
 
   setTeamNull(p) {
@@ -466,7 +469,7 @@ export class Game {
       this.applyHit(p, target, dmg, head, p.weapon);
     } else if (wh && wh.box.tag !== 'invisible') {
       this.effects.impact(point, wh.normal);
-      this.effects.hole(point, wh.normal, p.weapon === 'sniper' ? 1.5 : p.weapon === 'pistol' ? 0.85 : 1);
+      if (wh.box.tag !== 'angled') this.effects.hole(point, wh.normal, p.weapon === 'sniper' ? 1.5 : p.weapon === 'pistol' ? 0.85 : 1);
     }
     if (this.net && (p.isLocal || p.isBot)) this.net.send('shot', { id: p.id, o: from.map(r2), e: point.map(r2), w: p.weapon });
     if (p.mag[p.weapon] <= 0) this.reload(p);
@@ -584,7 +587,7 @@ export class Game {
   kill(victim, killerId, weapon, head) {
     victim.alive = false;
     victim.hp = 0;
-    victim.respawnAt = this.time + PLAYER.respawnTime;
+    victim.respawnAt = this.time + this.rules.respawn;
     if (victim.blink) { victim.blink.dead = true; victim.blink = null; }
     const msg = { v: victim.id, k: killerId, w: weapon, h: head ? 1 : 0, p: this.posOf(victim).map(r2) };
     if (this.net) this.net.send('death', msg);
@@ -615,8 +618,8 @@ export class Game {
     this.minimap.onDeath(v, msg.p);
     if (this.mode === 'tdm' && k && this.isEnemy(k, v) && this.match.phase === 'play') this.teamScore[k.team]++;
     if (this.isHost && this.match.phase === 'play') {
-      if (this.mode === 'ffa' && k && k.kills >= this.match.killLimit) this._endRound();
-      if (this.mode === 'tdm' && k && this.teamScore[k.team] >= this.match.killLimit) this._endRound();
+      if (this.mode === 'ffa' && k && this.match.killLimit && k.kills >= this.match.killLimit) this._endRound();
+      if (this.mode === 'tdm' && k && this.match.killLimit && this.teamScore[k.team] >= this.match.killLimit) this._endRound();
     }
   }
 
@@ -630,7 +633,9 @@ export class Game {
     const pos = [eye[0] + d[0] * 0.5, eye[1] + d[1] * 0.5 - 0.1, eye[2] + d[2] * 0.5];
     const v = [d[0] * GRENADE.throwSpeed + vel[0] * 0.4, d[1] * GRENADE.throwSpeed + GRENADE.upBoost + Math.max(0, vel[1]) * 0.3, d[2] * GRENADE.throwSpeed + vel[2] * 0.4];
     const id = this.selfId + ':' + (this.nextProjId++);
-    this.spawnProjectile({ id, kind: 'nade', owner: p.id, pos, vel: v, fuse: GRENADE.fuse, auth: true });
+    const pr = this.spawnProjectile({ id, kind: 'nade', owner: p.id, pos, vel: v, fuse: GRENADE.fuse, auth: true });
+    // local thrower: the grenade leaves the viewmodel hand ~0.1 s in; hide the world copy until then (spawn is not delayed)
+    if (p.isLocal) { pr.hideT = 0.1; pr.mesh.visible = false; this.vm.throwItem('nade'); }
     if (this.net) this.net.send('nade', { id, o: p.id, p: pos.map(r2), v: v.map(r2) });
     sfx.throw(p.isLocal ? null : p.ms ? p.ms.pos : p.rpos);
   }
@@ -646,6 +651,7 @@ export class Game {
     const v = d.map(x => x * BLINK.throwSpeed);
     const id = this.selfId + ':' + (this.nextProjId++);
     p.blink = this.spawnProjectile({ id, kind: 'blink', owner: p.id, pos, vel: v, fuse: BLINK.life, auth: true, color: p.color });
+    if (p.isLocal) { p.blink.hideT = 0.08; p.blink.mesh.visible = false; this.vm.throwItem('blink'); }
     sfx.throw(null);
   }
 
@@ -797,8 +803,9 @@ export class Game {
     }
     if (ph === 'play') {
       sfx.go();
-      const M = MODES[this.mode];
-      this.hud.announce('FIGHT!', this.teams ? `${TEAMS[this.local.team || 'A'].name} · first to ${M.limit} ${M.limitLabel}` : `First to ${M.limit} kills`);
+      const M = MODES[this.mode], L = this.match.killLimit;
+      const goal = L ? `first to ${L} ${this.teams ? M.limitLabel : 'kills'}` : (this.match.roundTime ? 'most points at the buzzer' : 'no limits, endless');
+      this.hud.announce('FIGHT!', this.teams ? `${TEAMS[this.local.team || 'A'].name} · ${goal}` : goal.charAt(0).toUpperCase() + goal.slice(1));
     }
     if (ph === 'end') {
       if (this.teams) {
@@ -813,9 +820,10 @@ export class Game {
 
   _hostMatch(dt) {
     const m = this.match;
-    m.t -= dt;
+    const endless = m.phase === 'play' && !m.roundTime;
+    if (!endless) m.t -= dt;
     if (m.phase === 'warmup' && m.t <= 0) { m.phase = 'play'; m.t = m.roundTime; this._onPhase('play'); this._sendMatch(); }
-    else if (m.phase === 'play' && m.t <= 0) this._endRound();
+    else if (m.phase === 'play' && !endless && m.t <= 0) this._endRound();
     else if (m.phase === 'end' && m.t <= 0) this._startWarmup();
     if (this.mode === 'ctf') this._hostFlags(dt);
     if (this.net && this.time - this.lastMatchSend > 1) this._sendMatch();
@@ -824,7 +832,7 @@ export class Game {
   _sendMatch() {
     if (!this.net) return;
     this.lastMatchSend = this.time;
-    this.net.send('match', { ph: this.match.phase, t: r2(this.match.t), r: this.match.round, w: this.match.winner, wt: this.match.winnerTeam, kl: this.match.killLimit, bc: this.botCount, df: this.difficulty, mp: this.mapId, mo: this.mode, ts: this.teamScore });
+    this.net.send('match', { ph: this.match.phase, t: r2(this.match.t), r: this.match.round, w: this.match.winner, wt: this.match.winnerTeam, kl: this.match.killLimit, rt: this.match.roundTime, rs: this.rules.respawn, bc: this.botCount, df: this.difficulty, mp: this.mapId, mo: this.mode, ts: this.teamScore });
   }
 
   // ---------------------------------------------------------------- AFK box + kick
@@ -914,6 +922,8 @@ export class Game {
       if ((d.mp && d.mp !== this.mapId) || (d.mo && d.mo !== this.mode)) this.applyMatchSettings(d.mp || this.mapId, d.mo || this.mode);
       const prev = this.match.phase;
       this.match.t = d.t; this.match.round = d.r; this.match.winner = d.w; this.match.winnerTeam = d.wt || null; this.match.killLimit = d.kl;
+      if (d.rt !== undefined) { this.match.roundTime = d.rt; this.rules.time = d.rt; this.rules.limit = d.kl; }
+      if (d.rs) this.rules.respawn = d.rs;
       if (d.ts) this.teamScore = d.ts;
       this.botCount = d.bc; this.difficulty = d.df;
       if (d.ph !== prev) {
@@ -939,7 +949,7 @@ export class Game {
       if (p.avatar) p.avatar.shoot();
       const dx = d.e[0] - d.o[0], dy = d.e[1] - d.o[1], dz = d.e[2] - d.o[2], dl = Math.hypot(dx, dy, dz) || 1;
       const h = this.world.raycast(d.o[0], d.o[1], d.o[2], dx / dl, dy / dl, dz / dl, dl + 0.2);
-      if (h && h.box.tag !== 'invisible' && Math.abs(h.t - dl) < 0.25) { this.effects.impact(d.e, h.normal); this.effects.hole(d.e, h.normal, d.w === 'sniper' ? 1.5 : 1); }
+      if (h && h.box.tag !== 'invisible' && Math.abs(h.t - dl) < 0.25) { this.effects.impact(d.e, h.normal); if (h.box.tag !== 'angled') this.effects.hole(d.e, h.normal, d.w === 'sniper' ? 1.5 : 1); }
       sfx.shot(d.w, d.o);
     });
     net.on('nade', (d) => {
@@ -981,7 +991,7 @@ export class Game {
       f.state = d.s; f.carrier = d.c || null; if (d.p && d.s !== 'carried') f.pos = d.p;
       if (d.ev) this._flagEvent(d.t, d.ev, d.by);
     });
-    net.on('restart', (d, from) => { if (from === this.hostId) this.applyMatchSettings(d.mp, d.mo); });
+    net.on('restart', (d, from) => { if (from === this.hostId) this.applyMatchSettings(d.mp, d.mo, false, d.ru || null); });
     net.on('ping', (d, from) => net.send('pong', d, from));
     net.on('pong', (d, from) => { const p = this.players.get(from); if (p) p.ping = Math.round((now() - d) * 1000); });
     this._electHost();
@@ -1185,6 +1195,7 @@ export class Game {
       const pr = this.projectiles[i];
       if (pr.dead) { this.scene.remove(pr.mesh); this.projectiles.splice(i, 1); continue; }
       pr.mesh.position.set(...pr.pos);
+      if (pr.hideT) { if (pr.age >= pr.hideT) { pr.mesh.visible = true; pr.hideT = 0; } }
       if (pr.kind === 'blink') { pr.mesh.rotation.y += dt * 12; pr.mesh.rotation.x = pr.normal && pr.normal[1] === 0 ? Math.PI / 2 : 0; }
       if (pr.kind === 'nade' && Math.random() < 0.3) this.effects.particle(pr.pos, [0, 0.5, 0], '#ff7b4a', 0.25, 0);
     }
@@ -1326,7 +1337,7 @@ export class Game {
     const rank = ranked.indexOf(L) + 1;
     const top = ranked[0] === L ? null : ranked[0];
     h.setMatch({
-      timeLeft: this.match.t, round: this.match.round, phase: this.match.phase, myKills: L.kills, killLimit: this.match.killLimit,
+      timeLeft: this.match.t, endless: this.match.phase === 'play' && !this.match.roundTime, round: this.match.round, phase: this.match.phase, myKills: L.kills, killLimit: this.match.killLimit,
       rank, total: ranked.length, leaderName: top ? top.name : '', leaderKills: top ? top.kills : 0, leaderColor: top ? top.color : '#fff',
       roomCode: this.roomCode, players: [...this.players.values()].filter(p => !p.isBot).length, isHost: this.net && this.isHost,
       bots: this.botCount, difficulty: this.difficulty,

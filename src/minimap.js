@@ -96,7 +96,7 @@ export class Minimap {
       if (o === L || !o.alive || o.afk) continue;
       const p = g.posOf(o);
       if (!g.isEnemy(L, o)) out.push({ kind: 'ally', x: p[0], z: p[2], yaw: o.yaw, color: g.displayColor(o) });
-      else if ((this.spotted.get(o.id) || 0) > g.time) out.push({ kind: 'enemy', x: p[0], z: p[2], color: g.teams ? TEAMS[o.team].color : '#ff3b30', fade: Math.min(1, (this.spotted.get(o.id) - g.time) / 0.4) });
+      else if ((this.spotted.get(o.id) || 0) > g.time) out.push({ kind: 'enemy', x: p[0], z: p[2], color: g.teams && o.team ? TEAMS[o.team].color : '#ff3b30', fade: Math.min(1, (this.spotted.get(o.id) - g.time) / 0.4) });
     }
     for (const d of this.deaths) out.push({ kind: 'dead', x: d.pos[0], z: d.pos[2], color: d.team ? TEAMS[d.team].color : '#111' });
     if (g.flags) for (const t of ['A', 'B']) { const f = g.flags[t]; out.push({ kind: 'flag', x: f.pos[0], z: f.pos[2], color: TEAMS[t].color, state: f.state }); }

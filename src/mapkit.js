@@ -10,6 +10,7 @@ const RANK = {
   truckRed: 3, carBlue: 3, carYellow: 3, crate: 3, sidingA: 4, sidingB: 4, brick: 4, sandstone: 4, sandstoneDark: 4,
   plaster: 4, ochre: 4, terracotta: 4, picket: 5, dark: 5, white: 5, blueTrim: 5, canvasRed: 6, canvasBlue: 6,
   trim: 6, orange: 6, lamp: 6, pad: 6, flowers: 6, glass: 7, afkglass: 7, water: 2,
+  shutterA: 6, shutterB: 6, sandbox: 2, soil: 2, veg: 4, cream: 4, steel: 5, farGrass: 0, farHouse: 4, farRoof: 5, cloth: 6, rope: 6, stripeA: 6, stripeB: 6,
 };
 
 const MAT_DEFS = {
@@ -24,6 +25,9 @@ const MAT_DEFS = {
   pad: { color: '#3ff2ff', emissive: '#18c8e0' }, trunk: { color: '#7a5233' },
   lamp: { color: '#fff4c2', emissive: '#ffe28a' }, orange: { color: '#ff8a3d' }, flowers: { color: '#ff6f9a' },
   water: { color: '#3d8fb8', emissive: '#0d3550' }, blueTrim: { color: '#2f7fc4' },
+  shutterA: { color: '#2f5f8f' }, shutterB: { color: '#9a4436' }, soil: { color: '#5a3f2a' }, veg: { color: '#5cae3e' },
+  cream: { color: '#efe4c8' }, sandbox: { color: '#e3cf9a' }, steel: { color: '#a9b2bd' }, farGrass: { tex: 'grass', uv: 8 }, farHouse: { color: '#d9d2c4' },
+  farRoof: { color: '#6d5a50' }, cloth: { color: '#e8eef5' }, rope: { color: '#cdb79a' }, stripeA: { color: '#ff7a3d' }, stripeB: { color: '#3ec1ff' },
   // desert
   sand: { dtex: 'sand', uv: 5 }, sandstone: { dtex: 'sandstone', uv: 3 }, sandstoneDark: { dtex: 'sandstoneDark', uv: 3 },
   plaster: { dtex: 'plaster', uv: 3 }, ochre: { dtex: 'ochre', uv: 3 }, terracotta: { dtex: 'terracotta', uv: 3 },
@@ -48,6 +52,24 @@ class GeoBucket {
     face([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], [0, 0, 1], [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
     face([[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], [0, 0, -1], [[-x1, y0], [-x0, y0], [-x0, y1], [-x1, y1]]);
   }
+  // box rotated about Y by `yaw` (world = c + R·local), UVs in the box's own frame
+  addOBox(c, h, yaw, uvScale) {
+    const s = 1 / uvScale, cs = Math.cos(yaw), sn = Math.sin(yaw);
+    const W = (lx, ly, lz) => [c[0] + lx * cs - lz * sn, c[1] + ly, c[2] + lx * sn + lz * cs];
+    const N = (lx, lz) => [lx * cs - lz * sn, 0, lx * sn + lz * cs];
+    const [hx, hy, hz] = h;
+    const face = (corners, n) => {
+      const base = this.pos.length / 3;
+      for (const [lx, ly, lz, u, v] of corners) { this.pos.push(...W(lx, ly, lz)); this.nor.push(...n); this.uv.push(u * s, v * s); }
+      this.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    };
+    face([[hx, -hy, hz, -hz, -hy], [hx, -hy, -hz, hz, -hy], [hx, hy, -hz, hz, hy], [hx, hy, hz, -hz, hy]], N(1, 0));
+    face([[-hx, -hy, -hz, -hz, -hy], [-hx, -hy, hz, hz, -hy], [-hx, hy, hz, hz, hy], [-hx, hy, -hz, -hz, hy]], N(-1, 0));
+    face([[-hx, hy, hz, -hx, -hz], [hx, hy, hz, hx, -hz], [hx, hy, -hz, hx, hz], [-hx, hy, -hz, -hx, hz]], [0, 1, 0]);
+    face([[-hx, -hy, -hz, -hx, -hz], [hx, -hy, -hz, hx, -hz], [hx, -hy, hz, hx, hz], [-hx, -hy, hz, -hx, hz]], [0, -1, 0]);
+    face([[-hx, -hy, hz, -hx, -hy], [hx, -hy, hz, hx, -hy], [hx, hy, hz, hx, hy], [-hx, hy, hz, -hx, hy]], N(0, 1));
+    face([[hx, -hy, -hz, -hx, -hy], [-hx, -hy, -hz, hx, -hy], [-hx, hy, -hz, hx, hy], [hx, hy, -hz, -hx, hy]], N(0, -1));
+  }
   toGeometry() {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
@@ -66,11 +88,37 @@ export function tf(rot, min, max) {
 }
 export function tp(rot, p) { return rot === 2 ? [-p[0], p[1], -p[2]] : [...p]; }
 
+// Cover a rotated rectangle (in XZ) with thin axis-aligned strips so the AABB physics world can collide with it.
+export function rasterRect(c, hx, hz, yaw, step = 0.25) {
+  const cs = Math.cos(yaw), sn = Math.sin(yaw);
+  const pts = [[hx, hz], [hx, -hz], [-hx, -hz], [-hx, hz]].map(([x, z]) => [c[0] + x * cs - z * sn, c[2] + x * sn + z * cs]);
+  const ex = Math.max(...pts.map(p => p[0])) - Math.min(...pts.map(p => p[0]));
+  const ez = Math.max(...pts.map(p => p[1])) - Math.min(...pts.map(p => p[1]));
+  const A = ex >= ez ? 0 : 1, Bx = 1 - A;            // strip along the longer world axis
+  const lo = Math.min(...pts.map(p => p[A])), hi = Math.max(...pts.map(p => p[A]));
+  const n = Math.max(1, Math.ceil((hi - lo) / step - 1e-6)), w = (hi - lo) / n;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const s0 = lo + i * w, s1 = s0 + w;
+    let bmin = Infinity, bmax = -Infinity;
+    for (let k = 0; k < 4; k++) {
+      const p = pts[k], q = pts[(k + 1) % 4];
+      if (p[A] >= s0 - 1e-6 && p[A] <= s1 + 1e-6) { bmin = Math.min(bmin, p[Bx]); bmax = Math.max(bmax, p[Bx]); }
+      for (const sx of [s0, s1]) {
+        if ((p[A] - sx) * (q[A] - sx) < 0) { const t = (sx - p[A]) / (q[A] - p[A]); const b = p[Bx] + (q[Bx] - p[Bx]) * t; bmin = Math.min(bmin, b); bmax = Math.max(bmax, b); }
+      }
+    }
+    if (bmin > bmax) continue;
+    out.push(A === 0 ? [s0, s1, bmin, bmax] : [bmin, bmax, s0, s1]);
+  }
+  return out;   // [x0, x1, z0, z1]
+}
+
 export function createKit(world) {
   let T = null, D = null;
   const buckets = {};
   const bucket = (m) => buckets[m] || (buckets[m] = new GeoBucket());
-  const canopies = [], palms = [];
+  const canopies = [], palms = [], hills = [], domeList = [];
 
   const B = {
     rot: 0,
@@ -81,6 +129,12 @@ export function createKit(world) {
     },
     collider(min, max, tag) { const [a, b] = tf(this.rot, min, max); world.add(a, b, tag); },
     visual(min, max, mat) { this.box(min, max, mat, false); },
+    // rotated box: centre c, half-extents h, yaw (radians). Point symmetry keeps yaw, mirrors the centre.
+    obox(c, h, yaw, mat, collide = true) {
+      const cc = tp(this.rot, c);
+      bucket(mat).addOBox(cc, h, yaw, (MAT_DEFS[mat] && MAT_DEFS[mat].uv) || 1);
+      if (collide) for (const [x0, x1, z0, z1] of rasterRect(cc, h[0], h[2], yaw)) world.add([x0, cc[1] - h[1], z0], [x1, cc[1] + h[1], z1], 'angled');
+    },
     p(p) { return tp(this.rot, p); },
   };
 
@@ -156,6 +210,85 @@ export function createKit(world) {
     B.collider([x0, 0, z0 + 0.3], [x0 + 7.1, 0.45, z0 + 2.2]);
   }
 
+  // Hollow box truck parked at an angle: walk in through the open back or the kerb-side door,
+  // peek through the window slot on the far side. Local u = length (cab at +u), w = width.
+  function atruck(cx, cz, yaw, cabMat = 'truckRed', stripe = 'orange', bodyMat = 'cream') {
+    const cs = Math.cos(yaw), sn = Math.sin(yaw);
+    const P = (u0, u1, w0, w1, y0, y1, mat, collide = true) => {
+      const uc = (u0 + u1) / 2, wc = (w0 + w1) / 2;
+      B.obox([cx + uc * cs - wc * sn, (y0 + y1) / 2, cz + uc * sn + wc * cs], [(u1 - u0) / 2, (y1 - y0) / 2, (w1 - w0) / 2], yaw, mat, collide);
+    };
+    const U0 = -3.7, U1 = 1.5, WI = 1.13, WO = 1.25, FL = 0.48, TOP = 3.05;
+    // chassis + floor (solid to the ground so nobody shoots under it)
+    P(U0, U1, -WO, WO, 0.22, FL - 0.08, 'dark');
+    P(U0, U1, -WI, WI, FL - 0.08, FL, 'wood');
+    P(U0, 3.8, -1.0, 1.0, 0, 0.22, 'dark');
+    // +w wall with a window slot
+    P(U0, -2.6, WI, WO, FL, TOP, bodyMat); P(-1.2, U1, WI, WO, FL, TOP, bodyMat);
+    P(-2.6, -1.2, WI, WO, FL, 1.6, bodyMat); P(-2.6, -1.2, WI, WO, 2.3, TOP, bodyMat);
+    // -w wall with a side door
+    P(U0, -1.1, -WO, -WI, FL, TOP, bodyMat); P(0.2, U1, -WO, -WI, FL, TOP, bodyMat); P(-1.1, 0.2, -WO, -WI, 2.45, TOP, bodyMat);
+    // front bulkhead, roof, rear header
+    P(U1 - 0.12, U1, -WI, WI, FL, TOP, bodyMat);
+    P(U0 - 0.05, U1 + 0.05, -WO - 0.05, WO + 0.05, TOP, TOP + 0.15, bodyMat);
+    P(U0, U0 + 0.14, -WI, WI, 2.8, TOP, 'dark');
+    // stripes (outside only), rear doors swung open flat against the sides, steps
+    P(U0 + 0.1, -2.6, WO, WO + 0.02, 2.15, 2.4, stripe, false); P(-1.2, U1 - 0.1, WO, WO + 0.02, 2.15, 2.4, stripe, false);
+    P(U0 + 0.1, -1.1, -WO - 0.02, -WO, 2.15, 2.4, stripe, false); P(0.2, U1 - 0.1, -WO - 0.02, -WO, 2.15, 2.4, stripe, false);
+    P(U0 - 0.02, U0 + 1.15, WO + 0.02, WO + 0.08, 0.55, 2.95, bodyMat, false);
+    P(U0 - 0.02, U0 + 1.15, -WO - 0.08, -WO - 0.02, 0.55, 2.95, bodyMat, false);
+    P(U0 - 0.3, U0, -1.0, 1.0, 0, 0.24, 'dark');
+    P(-1.0, 0.1, -1.5, -WO, 0, 0.22, 'dark');
+    P(0.4, 1.3, 0.15, 1.05, FL, FL + 0.9, 'crate');                       // crate inside: crouch cover
+    // cab + hood
+    P(1.6, 3.05, -1.15, 1.15, 0.22, 2.5, cabMat);
+    P(3.05, 3.8, -1.12, 1.12, 0.22, 1.55, cabMat);
+    P(2.95, 3.07, -1.0, 1.0, 1.6, 2.35, 'glass', false);
+    P(1.85, 2.85, 1.15, 1.17, 1.55, 2.3, 'glass', false); P(1.85, 2.85, -1.17, -1.15, 1.55, 2.3, 'glass', false);
+    P(3.8, 3.84, -0.85, 0.85, 0.6, 1.3, 'steel', false);
+    P(3.8, 3.86, 0.62, 0.95, 1.05, 1.35, 'lamp', false); P(3.8, 3.86, -0.95, -0.62, 1.05, 1.35, 'lamp', false);
+    P(1.6, 1.75, 1.15, 1.45, 1.6, 1.9, 'dark', false); P(1.6, 1.75, -1.45, -1.15, 1.6, 1.9, 'dark', false); // mirrors
+    // wheels
+    for (const u of [-3.0, -2.05, 2.9]) for (const ws of [-1, 1]) P(u - 0.45, u + 0.45, ws > 0 ? 1.12 : -1.38, ws > 0 ? 1.38 : -1.12, 0, 0.9, 'dark', false);
+  }
+
+  // Visual-only backdrop beyond the play area: far ground, a ring of buildings, trees and hills.
+  // Deterministic so every client sees the same skyline.
+  function scenery({ ix, iz, ground = 'farGrass', bodies = ['farHouse'], roof = 'farRoof', window = 'dark', trees = true, palmsToo = false, hillsAt = 95, seed = 7, flatRoof = false, tall = false, domes = false }) {
+    let a = seed >>> 0;
+    const rnd = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const r = B.rot; B.rot = 0;
+    B.visual([-160, -1.5, -160], [160, -0.06, 160], ground);
+    const building = (x, z, faceX) => {
+      const w = 7 + rnd() * 4, d = 6 + rnd() * 3, h = tall ? 7 + rnd() * 7 : 4.5 + rnd() * 3.5, body = bodies[Math.floor(rnd() * bodies.length)];
+      const [hw, hd] = faceX ? [d / 2, w / 2] : [w / 2, d / 2];
+      B.visual([x - hw, -0.06, z - hd], [x + hw, h, z + hd], body);
+      if (flatRoof) { B.visual([x - hw - 0.2, h, z - hd - 0.2], [x + hw + 0.2, h + 0.4, z + hd + 0.2], roof); if (domes && rnd() < 0.3) domeList.push([x, h + 0.4, z, Math.min(hw, hd) * 0.8]); }
+      else { B.visual([x - hw - 0.4, h, z - hd - 0.4], [x + hw + 0.4, h + 0.5, z + hd + 0.4], roof); B.visual([x - hw * 0.6, h + 0.5, z - hd * 0.6], [x + hw * 0.6, h + 1.6, z + hd * 0.6], roof); }
+      // windows on the face that looks at the arena
+      const fz = z > 0 ? z - hd - 0.05 : z + hd, fx = x > 0 ? x - hw - 0.05 : x + hw;
+      for (let f = 0; f < (h > 6.5 ? 2 : 1); f++) for (const o of [-0.3, 0.3]) {
+        const y0 = 1.4 + f * 3;
+        if (faceX) B.visual([fx, y0, z + o * w - 0.6], [fx + 0.05, y0 + 1.2, z + o * w + 0.6], window);
+        else B.visual([x + o * w - 0.6, y0, fz], [x + o * w + 0.6, y0 + 1.2, fz + 0.05], window);
+      }
+    };
+    for (let x = -ix - 26; x <= ix + 26; x += 13 + rnd() * 3) for (const sz of [-1, 1]) building(x + rnd() * 3, sz * (iz + 8 + rnd() * 6), false);
+    for (let z = -iz + 4; z <= iz - 4; z += 13 + rnd() * 3) for (const sx of [-1, 1]) building(sx * (ix + 8 + rnd() * 6), z + rnd() * 3, true);
+    if (trees || palmsToo) {
+      for (let i = 0; i < 26; i++) {
+        const ang = rnd() * Math.PI * 2, rx = ix + 4 + rnd() * 18, rz = iz + 4 + rnd() * 18;
+        const p = [Math.cos(ang) * rx, 0, Math.sin(ang) * rz];
+        if (Math.abs(p[0]) < ix + 2 && Math.abs(p[2]) < iz + 2) continue;
+        if (palmsToo) palms.push({ p: [p[0], 5 + rnd() * 2, p[2]], seed: rnd() * 6, trunk: true });
+        else canopies.push([p[0], 4 + rnd() * 1.5, p[2]]);
+        if (!palmsToo) B.visual([p[0] - 0.3, -0.06, p[2] - 0.3], [p[0] + 0.3, 3.4, p[2] + 0.3], 'trunk');
+      }
+    }
+    for (let i = 0; i < 9; i++) { const ang = i / 9 * Math.PI * 2 + rnd() * 0.4; hills.push([Math.cos(ang) * hillsAt * (1 + rnd() * 0.25), Math.sin(ang) * hillsAt * (0.85 + rnd() * 0.25), 22 + rnd() * 16, 9 + rnd() * 10]); }
+    B.rot = r;
+  }
+
   function tree(p, h = 3.6) {
     B.box([p[0] - 0.3, 0 + p[1], p[2] - 0.3], [p[0] + 0.3, h + p[1], p[2] + 0.3], 'trunk');
     canopies.push(tp(B.rot, [p[0], p[1] + h + 1.0, p[2]]));
@@ -229,7 +362,9 @@ export function createKit(world) {
       }
     }
     const frondMat = new THREE.MeshStandardMaterial({ color: '#4f9a3c', roughness: 0.85, flatShading: true, side: THREE.DoubleSide });
-    for (const { p, seed } of palms) {
+    const trunkMat = new THREE.MeshStandardMaterial({ color: '#7a5233', roughness: 0.9 });
+    for (const { p, seed, trunk } of palms) {
+      if (trunk) { const t = new THREE.Mesh(new THREE.BoxGeometry(0.4, p[1], 0.4), trunkMat); t.position.set(p[0], p[1] / 2, p[2]); group.add(t); }
       for (let i = 0; i < 7; i++) {
         const g = new THREE.ConeGeometry(0.5, 3.0, 4, 1); g.translate(0, 1.5, 0); g.scale(1, 1, 0.25);
         const m = new THREE.Mesh(g, frondMat);
@@ -238,6 +373,15 @@ export function createKit(world) {
         m.castShadow = true; group.add(m);
       }
       const nut = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 0), frondMat); nut.position.set(p[0], p[1], p[2]); group.add(nut);
+    }
+    const hillMat = new THREE.MeshStandardMaterial({ color: opts.hill || '#7fa36a', roughness: 1, flatShading: true });
+    for (const [x, z, r, h] of hills) {
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), hillMat);
+      m.scale.set(r, h, r * 0.8); m.position.set(x, -h * 0.15, z); group.add(m);
+    }
+    const domeMat = new THREE.MeshStandardMaterial({ color: opts.dome || '#e8d7b5', roughness: 0.8, flatShading: true });
+    for (const [x, y, z, r] of domeList) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2), domeMat); m.position.set(x, y, z); group.add(m);
     }
     const ringMat = new THREE.MeshBasicMaterial({ color: '#7ff8ff', transparent: true, opacity: 0.55, depthWrite: false });
     const padRings = [];
@@ -253,7 +397,7 @@ export function createKit(world) {
     return { group, padRings };
   }
 
-  return { B, wall, stairs, car, truck, tree, palm, pad, afkBox, perimeter, finalize };
+  return { B, wall, stairs, car, truck, atruck, tree, palm, pad, afkBox, perimeter, finalize, scenery };
 }
 
 // Nav graph: `half` nodes (keys starting with 'a_') are mirrored to 'b_' by 180° rotation,

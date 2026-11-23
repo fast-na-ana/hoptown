@@ -220,6 +220,29 @@ function buildKnife(P) {
     hip: new THREE.Vector3(0.17, -0.15, -0.3), ads: new THREE.Vector3(0.17, -0.15, -0.3), scale: 0.64 };
 }
 
+// ------------------------------------------------------------------ throw rig (off-hand + grenade / blink disc)
+function buildThrowRig(P) {
+  const g = new THREE.Group();
+  box(g, 0.068, 0.074, 0.085, P.glove, 0, 0, 0);                          // fist
+  box(g, 0.024, 0.03, 0.06, P.glove, 0.036, 0.03, -0.006, 0, 0, -0.3);    // thumb
+  box(g, 0.072, 0.012, 0.07, P.glove, 0, 0.04, -0.012);                   // fingers wrapped over
+  arm(g, P, [0, -0.03, 0.045], [-0.07, -0.21, 0.4]);
+  const olive = M('nadeBody', '#3b4d2e', { roughness: 0.62, metalness: 0.1 });
+  const ember = M('nadeBand', '#ff5a2a', { emissive: '#ff3b1f', emissiveIntensity: 0.9, roughness: 0.5 });
+  const nade = new THREE.Group(); nade.position.set(0.004, 0.072, -0.018); g.add(nade);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.043, 14, 10), olive); body.scale.set(1, 1.18, 1); nade.add(body);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0445, 0.0445, 0.012, 16), ember); nade.add(band);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.02, 0.024, 10), P.metal); cap.position.y = 0.056; nade.add(cap);
+  box(nade, 0.012, 0.07, 0.007, P.metal, 0.03, 0.025, 0, 0, 0, 0.22);     // spoon
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.015, 0.0028, 6, 14), P.metal);
+  ring.position.set(-0.024, 0.066, 0); ring.rotation.y = Math.PI / 2; nade.add(ring);
+  const disc = new THREE.Group(); disc.position.set(0.004, 0.05, -0.03); g.add(disc);
+  const dm = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.014, 20), P.accent); dm.rotation.x = 0.35; disc.add(dm);
+  const dc = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.017, 14), P.dark); dc.rotation.x = 0.35; disc.add(dc);
+  g.visible = false;
+  return { g, nade, disc };
+}
+
 // ------------------------------------------------------------------ spring
 class Spring {
   constructor(k = 160, damp = 0.62) { this.k = k; this.c = 2 * Math.sqrt(k) * damp; this.x = new THREE.Vector3(); this.v = new THREE.Vector3(); }
@@ -266,6 +289,8 @@ export class ViewModel {
       if (m.bolt) m.boltHome = m.bolt.position.clone();
     }
     this.current = 'rifle'; this.models.rifle.g.visible = true;
+    this.rig = buildThrowRig(P); this.rig.g.scale.setScalar(0.72); this.scene.add(this.rig.g);
+    this.throwT = -1; this.throwDur = 0.36; this.throwRelease = 0.28;
     this.posSpring = new Spring(170, 0.6); this.rotSpring = new Spring(140, 0.55);
     this.moveSpring = new Spring(60, 0.7);
     this.swayX = 0; this.swayY = 0; this.bob = 0; this.bobAmt = 0; this.ads = 0;
@@ -300,7 +325,7 @@ export class ViewModel {
     for (const k in this.models) {
       const m = this.models[k];
       if (m.mag) { m.mag.position.copy(m.magHome); m.mag.visible = true; }
-      if (m.left) m.left.position.copy(m.leftHome);
+      if (m.left) { m.left.position.copy(m.leftHome); m.left.visible = true; }
       if (m.slide) m.slide.position.copy(m.slideHome);
       if (m.charge) m.charge.position.copy(m.chargeHome);
       if (m.bolt) { m.bolt.position.copy(m.boltHome); m.bolt.rotation.set(0, 0, 0); }
@@ -333,9 +358,16 @@ export class ViewModel {
   bolt(dur) { if (this.current === 'sniper') this._start('bolt', dur); }
   cancelReload() { if (this.action === 'reload') { this.action = null; this._resetParts(); } }
   slash() { this._start('slash', 0.42); }
+  // Off-hand flick; purely visual and runs alongside whatever the gun is doing.
+  throwItem(kind = 'nade') {
+    const blink = kind === 'blink';
+    this.throwT = 0; this.throwDur = blink ? 0.3 : 0.36; this.throwRelease = blink ? 0.27 : 0.28;
+    this.rig.nade.visible = !blink; this.rig.disc.visible = blink; this.rig.g.visible = true;
+  }
   quickKnife() { this._show('knife'); this._start('quick', 0.5); }
 
   update(dt, { ads, speed, onGround, mouseDX, mouseDY, sliding, vy = 0 }) {
+    dt = Math.max(0, dt);
     this.time += dt;
     const id = this.action === 'quick' ? 'knife' : this.current;
     const m = this.models[id];
@@ -399,6 +431,23 @@ export class ViewModel {
       if (this.actionT >= D) {
         const was = this.action; this.action = null; this._resetParts();
         if (was === 'quick') { this._show(this.current); this._start('equip', 0.28); }
+      }
+    }
+    if (this.throwT >= 0) {
+      this.throwT += dt;
+      const k = this.throwT / this.throwDur, R = this.rig;
+      if (k >= 1) { this.throwT = -1; R.g.visible = false; if (m.left) m.left.visible = true; }
+      else {
+        const up = easeOut(k / 0.3);                 // hand rises into a cocked pose
+        const flick = smooth(0.2, 0.42, k);          // snap forward, item leaves the hand mid-snap
+        const out = smooth(0.45, 1, k);              // follow-through, drop out of view
+        R.g.position.set(-0.27 + up * 0.07 + flick * 0.19 + out * 0.07, -0.44 + up * 0.36 + flick * 0.05 - out * 0.52, -0.25 - flick * 0.25 + out * 0.05);
+        R.g.rotation.set(-0.75 * up * (1 - flick) + flick * 0.55 + out * 0.35, 0.45 - flick * 0.55, 0.3 - flick * 0.45);
+        const held = k < this.throwRelease;
+        R.nade.visible = held && this.throwDur > 0.32; R.disc.visible = held && this.throwDur <= 0.32;
+        const dip = smooth(0, 0.14, k) * (1 - smooth(0.55, 1, k));
+        pos.y -= dip * 0.07; pos.x += dip * 0.035; rz -= dip * 0.28; rx -= dip * 0.12;
+        if (m.left) m.left.visible = dip < 0.25;
       }
     }
     if (m.slide && this.action !== 'reload') {

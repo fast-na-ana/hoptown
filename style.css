@@ -85,6 +85,18 @@ button { font: inherit; cursor: pointer; }
 .mode-row .lbl { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; }
 .mode-row .seg { flex: 1; }
 #mode-blurb { margin: 8px 0 6px; }
+/* match rules steppers */
+.rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.step { display: grid; grid-template-columns: 26px 1fr 26px; grid-template-rows: auto auto; align-items: center; background: #fff; border: var(--bd); border-radius: 10px; box-shadow: 3px 3px 0 var(--k); overflow: hidden; }
+.step small { grid-column: 1 / 4; font: 700 9.5px 'Space Mono', monospace; letter-spacing: 1.3px; color: var(--k); background: var(--g1); border-bottom: 2px solid var(--k); padding: 3px 7px; }
+.step button { height: 30px; border: 0; background: var(--y); color: var(--k); font: 900 15px 'Archivo', sans-serif; cursor: pointer; }
+.step button:first-of-type { border-right: 2px solid var(--k); }
+.step button:last-of-type { border-left: 2px solid var(--k); }
+.step button:hover { background: var(--k); color: var(--y); }
+.step button:disabled { background: var(--g1); color: var(--g2); cursor: default; }
+.step b { text-align: center; font: 700 11px 'Space Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+.step.custom b { color: #0a7a3a; }
+#pause-rules { margin: 0 0 12px; }
 .seg.seg2 { grid-template-columns: repeat(2, 1fr); }
 .map-tags { display: flex; gap: 8px; padding: 12px 14px; background: var(--y); border-top: var(--bd); flex-wrap: wrap; }
 .map-tags span { font: 700 11px 'Space Mono', monospace; letter-spacing: 1px; color: var(--k); background: #fff; border: 2px solid var(--k); border-radius: 999px; padding: 3px 10px; box-shadow: 2px 2px 0 var(--k); }
@@ -151,7 +163,7 @@ table.controls td:nth-child(odd) { white-space: nowrap; width: 1%; }
 .live, .off { display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--k); margin-right: 6px; vertical-align: -1px; }
 .live { background: var(--grn); animation: blinkdot 1.6s infinite; } .off { background: var(--g2); }
 @keyframes blinkdot { 50% { opacity: 0.35; } }
-#fps { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; background: var(--k); color: var(--y); padding: 3px 8px; border-radius: 6px; }
+#fps { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); opacity: .85; font-size: 11px; font-weight: 700; background: var(--k); color: var(--y); padding: 3px 8px; border-radius: 6px; }
 
 /* kill feed (top-right) */
 #killfeed { position: absolute; top: 222px; right: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
@@ -198,7 +210,7 @@ table.controls td:nth-child(odd) { white-space: nowrap; width: 1%; }
 #centerbig { position: absolute; top: 26%; left: 50%; transform: translateX(-50%); font-size: 120px; font-weight: 900; font-stretch: 125%; color: var(--y); -webkit-text-stroke: 4px var(--k); paint-order: stroke fill; text-shadow: 6px 6px 0 var(--k); display: none; }
 #centerbig.pop { animation: count .9s ease-out; }
 @keyframes count { from { transform: translateX(-50%) scale(1.5); opacity: 0; } 30% { opacity: 1; } }
-#afk-banner { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 10px; padding: 7px 14px; border-radius: 10px; background: var(--y); font: 12px 'Space Mono', monospace; }
+#afk-banner { position: absolute; top: 66px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 10px; padding: 7px 14px; border-radius: 10px; background: var(--y); font: 12px 'Space Mono', monospace; }
 #afk-banner.on { display: flex; }
 #afk-banner b { background: var(--k); color: var(--y); padding: 1px 7px; border-radius: 4px; font-size: 12px; }
 

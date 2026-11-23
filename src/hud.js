@@ -138,19 +138,19 @@ export class Hud {
     this.hitT = kill ? 0.35 : 0.16;
   }
 
-  setMatch({ timeLeft, round, phase, myKills, killLimit, rank, total, leaderName, leaderKills, leaderColor, roomCode, players, isHost, bots, difficulty, modeName, teams, scoreA, scoreB, myTeam, mapName }) {
+  setMatch({ timeLeft, endless, round, phase, myKills, killLimit, rank, total, leaderName, leaderKills, leaderColor, roomCode, players, isHost, bots, difficulty, modeName, teams, scoreA, scoreB, myTeam, mapName }) {
     const m = Math.max(0, Math.floor(timeLeft / 60)), s = Math.max(0, Math.floor(timeLeft % 60));
     this._set('m-round', 'text', `ROUND ${round}`);
     this._set('m-phase', 'text', phase === 'warmup' ? 'GET READY' : phase === 'end' ? 'ROUND OVER' : (modeName || 'FREE FOR ALL'));
     this._cls($('match'), 'teams', !!teams);
     if (teams) {
-      const tot = Math.max(1, killLimit);
-      this._set('m-teams', 'html', `<div class="tm A${myTeam === 'A' ? ' me' : ''}"><span>EMBER</span><b>${scoreA}</b></div><div class="tlim">/${killLimit}</div><div class="tm B${myTeam === 'B' ? ' me' : ''}"><b>${scoreB}</b><span>TIDE</span></div>`
+      const tot = killLimit || Math.max(10, scoreA, scoreB) * 1.25;
+      this._set('m-teams', 'html', `<div class="tm A${myTeam === 'A' ? ' me' : ''}"><span>EMBER</span><b>${scoreA}</b></div><div class="tlim">/${killLimit || '∞'}</div><div class="tm B${myTeam === 'B' ? ' me' : ''}"><b>${scoreB}</b><span>TIDE</span></div>`
         + `<div class="tbar"><i class="A" style="width:${Math.min(50, scoreA / tot * 50)}%"></i><i class="B" style="width:${Math.min(50, scoreB / tot * 50)}%"></i></div>`);
     }
-    this._set('timer', 'text', phase === 'end' ? '--:--' : `${m}:${String(s).padStart(2, '0')}`);
+    this._set('timer', 'text', phase === 'end' ? '--:--' : endless ? '∞' : `${m}:${String(s).padStart(2, '0')}`);
     this._set('m-kills', 'text', String(myKills));
-    this._set('m-goal', 'text', String(killLimit));
+    this._set('m-goal', 'text', killLimit ? String(killLimit) : '∞');
     this._set('m-bar', 'width', Math.min(100, myKills / killLimit * 100) + '%');
     this._set('m-rank', 'html', `<b>#${rank}</b> of ${total}`);
     this._set('m-leader', 'html', leaderName ? `<span class="dot" style="background:${leaderColor}"></span>${esc(leaderName)} <b>${leaderKills}</b>` : '<i>you lead</i>');
