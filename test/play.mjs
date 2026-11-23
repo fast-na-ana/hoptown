@@ -1,0 +1,38 @@
+import puppeteer from 'puppeteer-core';
+const url = process.argv[2] || 'http://localhost:8123/index.html?test';
+const b = await puppeteer.launch({executablePath:'/usr/bin/google-chrome',headless:'new',args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--window-size=1280,720']});
+const p = await b.newPage();
+await p.setViewport({width:1280,height:720});
+const errs=[];
+p.on('console', m => { if (m.type()==='error' || m.type()==='warning') errs.push(m.type()+': '+m.text()); });
+p.on('pageerror', e => errs.push('pageerror: '+e.message));
+await p.goto(url, {waitUntil:'load'});
+await p.screenshot({path:'test/shots/menu.png'});
+await p.evaluate(() => window.__start('offline'));
+await p.evaluate(() => { const g = window.__hoptown.game; g.forceInput = true; });
+await new Promise(r=>setTimeout(r,4500));
+await p.screenshot({path:'test/shots/spawn.png'});
+// walk forward + jump
+const info = await p.evaluate(async () => {
+  const g = window.__hoptown.game;
+  const out = {};
+  out.start = [...g.local.ms.pos];
+  g.input.keys.add('KeyW');
+  await new Promise(r=>setTimeout(r,1500));
+  out.afterWalk = [...g.local.ms.pos];
+  out.vel = Math.hypot(g.local.ms.vel[0], g.local.ms.vel[2]);
+  g.input.keys.delete('KeyW');
+  out.phase = g.match.phase; out.t = g.match.t;
+  out.players = [...g.players.values()].map(p=>({n:p.name, a:p.alive, pos:g.posOf(p).map(v=>+v.toFixed(1)), k:p.kills, d:p.deaths}));
+  out.nav = g.map.nav.nodes.length; out.navLinks = g.map.nav.nodes.reduce((s,n)=>s+n.links.length,0);
+  out.isolated = g.map.nav.nodes.filter(n=>n.links.length===0).map(n=>n.id);
+  out.boxes = g.world.boxes.length;
+  return out;
+});
+console.log(JSON.stringify(info));
+await new Promise(r=>setTimeout(r,15000));
+const info2 = await p.evaluate(() => { const g = window.__hoptown.game; return {phase:g.match.phase, t:g.match.t.toFixed(1), players:[...g.players.values()].map(p=>`${p.name}:${p.kills}/${p.deaths} ${p.alive?'alive':'dead'} @${g.posOf(p).map(v=>v.toFixed(0))}`)}; });
+console.log(JSON.stringify(info2));
+await p.screenshot({path:'test/shots/later.png'});
+console.log('ERRORS', errs.slice(0,15).join('\n'));
+await b.close();

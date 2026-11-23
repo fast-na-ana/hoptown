@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hoptown — fast browser FPS</title>
+<meta name="description" content="Hoptown: a fast-movement browser arena shooter. Bunny hop, slide, blink and frag your friends.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%233ec1ff%27/%3E%3Cpath d=%27M8 24V8h4v6h8V8h4v16h-4v-6h-8v6z%27 fill=%27%2306202b%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="menu">
+  <div class="menu-card">
+    <h1>HOP<span>TOWN</span></h1>
+    <p class="tag">fast-movement arena shooter · map: Maple Court</p>
+    <div class="row"><label>Name</label><input id="name" maxlength="16" autocomplete="off"></div>
+    <div class="row"><label>Colour</label><div id="swatches"></div></div>
+    <div class="cols">
+      <div class="panel">
+        <h3>Play vs Bots</h3>
+        <div class="row"><label>Bots <b id="bots-val"></b></label><input id="bots" type="range" min="0" max="9" step="1"></div>
+        <div class="row"><label>Difficulty</label>
+          <select id="difficulty"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
+        <button id="play-bots" class="big">PLAY</button>
+      </div>
+      <div class="panel">
+        <h3>Multiplayer</h3>
+        <div class="row"><label>Room code</label><input id="room" maxlength="12" placeholder="leave empty to create" autocomplete="off"></div>
+        <p class="hint" id="room-hint">Create a room, then share the link. The bot slider applies here too.</p>
+        <button id="play-online" class="big alt">CREATE / JOIN</button>
+        <p id="status" class="hint"></p>
+      </div>
+    </div>
+    <details>
+      <summary>Settings</summary>
+      <div class="row"><label>Sensitivity <b id="sens-val"></b></label><input id="sens" type="range" min="0.1" max="4" step="0.05"></div>
+      <div class="row"><label>Field of view <b id="fov-val"></b></label><input id="fov" type="range" min="60" max="100" step="1"></div>
+      <div class="row"><label>Volume <b id="volume-val"></b></label><input id="volume" type="range" min="0" max="1" step="0.05"></div>
+      <div class="row"><label>Shadows</label><input id="shadows" type="checkbox"></div>
+      <div class="row"><label>Invert mouse Y</label><input id="invert" type="checkbox"></div>
+    </details>
+    <details>
+      <summary>Controls</summary>
+      <table class="controls">
+        <tr><td>WASD</td><td>Move</td><td>Mouse</td><td>Aim · LMB fire · RMB aim down sights</td></tr>
+        <tr><td>Space</td><td>Jump · press again in air to double jump · hold to bunny hop</td><td>Shift / C</td><td>Crouch · while running = slide</td></tr>
+        <tr><td>1 / 2 / Wheel</td><td>Rifle / Pistol</td><td>R</td><td>Reload</td></tr>
+        <tr><td>G</td><td>Grenade</td><td>Q (or E)</td><td>Throw blink disc · press again to teleport to it</td></tr>
+        <tr><td>Tab</td><td>Scoreboard</td><td>Esc</td><td>Menu</td></tr>
+      </table>
+      <p class="hint">Tips: strafe (A/D) while turning the mouse in the air to gain speed. Slide-jump keeps momentum. Cyan pads launch you onto the roofs.</p>
+    </details>
+  </div>
+</div>
+
+<div id="hud" style="display:none">
+  <div id="vignette"></div>
+  <div id="dmg-layer"></div>
+  <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="c"></i></div>
+  <div id="hitmarker"></div>
+  <div id="speed"></div>
+  <div id="topbar">
+    <div id="round"></div>
+    <div id="timer"></div>
+    <div id="scoreline"><span>YOU <b id="score-me">0</b> / <span id="score-goal">20</span></span><span id="score-leader"></span></div>
+  </div>
+  <div id="room"></div>
+  <div id="killfeed"></div>
+  <div id="streak"></div>
+  <div id="announce"></div>
+  <div id="notice"></div>
+  <div id="centerbig"></div>
+  <div id="bottom-left">
+    <div id="hp-num">100</div>
+    <div id="hp-bar"><div id="hp-fill"></div></div>
+  </div>
+  <div id="bottom-right">
+    <div id="wpn-name"></div>
+    <div id="ammo"></div>
+    <div id="util"><span id="nades"></span><span id="blink"></span></div>
+  </div>
+  <div id="death"><div id="death-by"></div><div id="death-timer"></div></div>
+  <div id="scoreboard">
+    <div class="sb-card">
+      <h2 id="sb-title"></h2>
+      <table><thead><tr><th>#</th><th>Player</th><th>Score</th><th>K</th><th>D</th><th>Best streak</th><th>Rounds won</th><th></th></tr></thead><tbody id="sb-body"></tbody></table>
+      <p id="sb-footer"></p>
+    </div>
+  </div>
+</div>
+
+<div id="pause" style="display:none">
+  <div class="menu-card small">
+    <h2>PAUSED</h2>
+    <p id="pause-room" class="hint"></p>
+    <button id="resume" class="big">RESUME</button>
+    <button id="copy-link" class="alt">Copy invite link</button>
+    <div class="row" id="pause-bots-row"><label>Bots <b id="pause-bots-val"></b></label><input id="pause-bots" type="range" min="0" max="9" step="1"></div>
+    <button id="quit" class="ghost">Leave match</button>
+  </div>
+</div>
+
+<noscript>Hoptown needs JavaScript and WebGL.</noscript>
+<script type="module" src="dist/game.js"></script>
+</body>
+</html>
