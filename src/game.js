@@ -15,6 +15,9 @@ import { Bot, BOT_NAMES } from './bots.js';
 import { PlantMode } from './plant.js';
 import { loadoutHtml, LOADOUT_KEYS } from './panels.js';
 
+// sheet materials bullets go through (with reduced damage)
+const PENETRABLE = new Set(['plywood', 'drywall']);
+
 const now = () => performance.now() / 1000;
 const r2 = (v) => Math.round(v * 100) / 100;
 
@@ -502,8 +505,28 @@ export class Game {
     const ol = Math.hypot(...o); return o.map(v => v / ol);
   }
 
+  // Ray through the world. Thin plywood / drywall is shot through (up to two sheets), each sheet
+  // keeping only part of the damage; anything else stops the bullet.
   _trace(p, eye, d) {
-    const wh = this.world.raycast(eye[0], eye[1], eye[2], d[0], d[1], d[2], 250);
+    const W = WEAPONS[p.weapon] || {};
+    const keep = W.pellets ? 0.35 : (W.scope || W.heavy) ? 0.75 : p.weapon === 'pistol' ? 0.45 : 0.55;
+    const layers = [];
+    let wh = null, from = eye, gone = 0;
+    for (let k = 0; k < 3; k++) {
+      const h = this.world.raycast(from[0], from[1], from[2], d[0], d[1], d[2], 250 - gone);
+      if (!h) break;
+      const tIn = gone + h.t;
+      if (k < 2 && PENETRABLE.has(h.box.mat)) {
+        const b = h.box, q = [eye[0] + d[0] * tIn, eye[1] + d[1] * tIn, eye[2] + d[2] * tIn];
+        let ex = Infinity;
+        for (let i = 0; i < 3; i++) if (Math.abs(d[i]) > 1e-6) ex = Math.min(ex, ((d[i] > 0 ? b.max[i] : b.min[i]) - q[i]) / d[i]);
+        const tOut = tIn + Math.max(0, Math.min(ex, 1.5));
+        layers.push({ tIn, tOut, normal: h.normal, box: b });
+        gone = tOut + 0.02; from = [eye[0] + d[0] * gone, eye[1] + d[1] * gone, eye[2] + d[2] * gone];
+        continue;
+      }
+      wh = { ...h, t: tIn }; break;
+    }
     let bestT = wh ? wh.t : 250, target = null, head = false;
     for (const o of this.players.values()) {
       if (o === p || !o.alive || o.afk || !this.isEnemy(p, o)) continue;
@@ -513,7 +536,9 @@ export class Game {
       const rb = rayBox(eye[0], eye[1], eye[2], d[0], d[1], d[2], hb.body[0], hb.body[1]);
       if (rb && rb.t < bestT) { bestT = rb.t; target = o; head = false; }
     }
-    return { wh, t: bestT, target, head, point: [eye[0] + d[0] * bestT, eye[1] + d[1] * bestT, eye[2] + d[2] * bestT] };
+    let mult = 1;
+    for (const l of layers) if (l.tIn < bestT) mult *= keep;
+    return { wh, t: bestT, target, head, mult, layers: layers.filter(l => l.tIn < bestT), eye, d, point: [eye[0] + d[0] * bestT, eye[1] + d[1] * bestT, eye[2] + d[2] * bestT] };
   }
 
   // Hitscan shot (or a spread of pellets). Returns {target, head, point} of the first ray.
@@ -533,8 +558,16 @@ export class Game {
       if (!first) first = r;
       ends.push(r.point);
       if (n > 1 && i % 2 === 0) this.effects.tracer(from, r.point, 0.6);
+      for (const l of r.layers) {   // splinters + a hole on both faces of each sheet shot through
+        const pin = [r.eye[0] + r.d[0] * l.tIn, r.eye[1] + r.d[1] * l.tIn, r.eye[2] + r.d[2] * l.tIn];
+        const pout = [r.eye[0] + r.d[0] * l.tOut, r.eye[1] + r.d[1] * l.tOut, r.eye[2] + r.d[2] * l.tOut];
+        this.effects.impact(pin, l.normal, l.box.mat, n > 1 ? 0.4 : 0.8);
+        this.effects.hole(pin, l.normal, n > 1 ? 0.6 : 0.9);
+        this.effects.hole(pout, l.normal.map(v => -v), n > 1 ? 0.6 : 0.9);
+        if (n === 1) this.effects.burst(pout, 4, '#d8c49a', 2.2, 0.4, r.d, 8, 0.05);
+      }
       if (r.target) {
-        let dmg = W.damage;
+        let dmg = W.damage * r.mult;
         if (r.t > W.falloffStart) dmg = Math.max(W.minDamage, W.damage - (W.damage - W.minDamage) * Math.min(1, (r.t - W.falloffStart) / (W.falloffEnd - W.falloffStart)));
         if (r.head) dmg *= W.headMul;
         const h = hits.get(r.target) || { dmg: 0, head: false, point: r.point };
@@ -1050,6 +1083,10 @@ export class Game {
         if (!d.es || i % 2 === 0) this.effects.tracer(d.o, e, d.es ? 0.6 : 1);
         const dx = e[0] - d.o[0], dy = e[1] - d.o[1], dz = e[2] - d.o[2], dl = Math.hypot(dx, dy, dz) || 1;
         const h = this.world.raycast(d.o[0], d.o[1], d.o[2], dx / dl, dy / dl, dz / dl, dl + 0.2);
+        if (h && PENETRABLE.has(h.box.mat) && h.t < dl - 0.25) {
+          const q = [d.o[0] + dx / dl * h.t, d.o[1] + dy / dl * h.t, d.o[2] + dz / dl * h.t];
+          this.effects.impact(q, h.normal, h.box.mat, 0.6); this.effects.hole(q, h.normal, 0.8);
+        }
         if (h && h.box.tag !== 'invisible' && Math.abs(h.t - dl) < 0.25) {
           this.effects.impact(e, h.normal, h.box.mat, d.es ? 0.5 : 1);
           if (h.box.tag !== 'angled') this.effects.hole(e, h.normal, d.w === 'sniper' || W.heavy ? 1.5 : d.es ? 0.6 : 1);

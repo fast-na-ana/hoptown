@@ -10,6 +10,8 @@ const RANK = {
   truckRed: 3, carBlue: 3, carYellow: 3, crate: 3, sidingA: 4, sidingB: 4, brick: 4, sandstone: 4, sandstoneDark: 4,
   plaster: 4, ochre: 4, terracotta: 4, picket: 5, dark: 5, white: 5, blueTrim: 5, canvasRed: 6, canvasBlue: 6,
   trim: 6, orange: 6, lamp: 6, pad: 6, flowers: 6, glass: 7, afkglass: 7, water: 2,
+  slab: 0, shellconc: 2, corrugated: 3, roofsheet: 2, truss: 4, skylight: 5, plywood: 3, drywall: 3, sandbag: 3, pallet: 3,
+  contA: 3, contB: 3, hazard: 6, paintA: 6, paintB: 6, targetRed: 6, barrel: 3,
   shutterA: 6, shutterB: 6, sandbox: 2, soil: 2, veg: 4, cream: 4, steel: 5, farGrass: 0, farHouse: 4, farRoof: 5, cloth: 6, rope: 6, stripeA: 6, stripeB: 6,
 };
 
@@ -26,7 +28,12 @@ const MAT_DEFS = {
   lamp: { color: '#fff4c2', emissive: '#ffe28a' }, orange: { color: '#ff8a3d' }, flowers: { color: '#ff6f9a' },
   water: { color: '#3d8fb8', emissive: '#0d3550' }, blueTrim: { color: '#2f7fc4' },
   shutterA: { color: '#2f5f8f' }, shutterB: { color: '#9a4436' }, soil: { color: '#5a3f2a' }, veg: { color: '#5cae3e' },
-  cream: { color: '#efe4c8' }, sandbox: { color: '#e3cf9a' }, steel: { color: '#a9b2bd' }, farGrass: { tex: 'grass', uv: 8 }, farHouse: { color: '#d9d2c4' },
+  cream: { color: '#efe4c8' }, sandbox: { color: '#e3cf9a' },
+  slab: { tex: 'concrete', uv: 5, color: '#c4c2bc' }, shellconc: { tex: 'concrete', uv: 2.5, color: '#a9a8a2' }, corrugated: { tex: 'metal', uv: 3, color: '#8b95a1' },
+  roofsheet: { color: '#4e545c' }, truss: { color: '#3a3f47' }, skylight: { color: '#eaf4ff', emissive: '#cfe3ff' },
+  plywood: { color: '#dcc193' }, drywall: { color: '#e7e4dc' }, sandbag: { color: '#b8a477' }, pallet: { tex: 'wood', uv: 0.9, color: '#d0ac74' },
+  contA: { tex: 'metal', uv: 1.2, color: '#c9563e' }, contB: { tex: 'metal', uv: 1.2, color: '#2f7193' }, hazard: { color: '#ffd60a' }, paintA: { color: '#ff7a3d' }, paintB: { color: '#3ec1ff' },
+  targetRed: { color: '#d8332b' }, barrel: { color: '#3d6e4a' }, steel: { color: '#a9b2bd' }, farGrass: { tex: 'grass', uv: 8 }, farHouse: { color: '#d9d2c4' },
   farRoof: { color: '#6d5a50' }, cloth: { color: '#e8eef5' }, rope: { color: '#cdb79a' }, stripeA: { color: '#ff7a3d' }, stripeB: { color: '#3ec1ff' },
   // desert
   sand: { dtex: 'sand', uv: 5 }, sandstone: { dtex: 'sandstone', uv: 3 }, sandstoneDark: { dtex: 'sandstoneDark', uv: 3 },
@@ -93,11 +100,13 @@ class GeoBucket {
 }
 
 // 180° rotation about the origin gives perfectly fair, point-symmetric maps.
+// rot 0 = as written, 2 = 180° point symmetry, 'mz' = mirror across the z = 0 line
 export function tf(rot, min, max) {
   if (rot === 0) return [min, max];
+  if (rot === 'mz') return [[min[0], min[1], -max[2]], [max[0], max[1], -min[2]]];
   return [[-max[0], min[1], -max[2]], [-min[0], max[1], -min[2]]];
 }
-export function tp(rot, p) { return rot === 2 ? [-p[0], p[1], -p[2]] : [...p]; }
+export function tp(rot, p) { return rot === 2 ? [-p[0], p[1], -p[2]] : rot === 'mz' ? [p[0], p[1], -p[2]] : [...p]; }
 
 // Cover a rotated rectangle (in XZ) with thin axis-aligned strips so the AABB physics world can collide with it.
 export function rasterRect(c, hx, hz, yaw, step = 0.25) {
@@ -138,11 +147,18 @@ export function createKit(world) {
       bucket(mat).addBox(a, b, (MAT_DEFS[mat] && MAT_DEFS[mat].uv) || 1);
       if (collide) world.add(a, b).mat = mat;
     },
-    collider(min, max, tag) { const [a, b] = tf(this.rot, min, max); world.add(a, b, tag); },
+    collider(min, max, tag, mat) { const [a, b] = tf(this.rot, min, max); const bx = world.add(a, b, tag); if (mat) bx.mat = mat; return bx; },
+    // climbable volume; dir = horizontal direction a climber faces (into the ladder)
+    ladder(min, max, dir) {
+      const [a, b] = tf(this.rot, min, max);
+      const d = this.rot === 'mz' ? [dir[0], -dir[1]] : this.rot === 2 ? [-dir[0], -dir[1]] : dir;
+      (world.ladders || (world.ladders = [])).push({ min: a, max: b, dir: d });
+    },
     visual(min, max, mat) { this.box(min, max, mat, false); },
     // rotated box: centre c, half-extents h, yaw (radians). Point symmetry keeps yaw, mirrors the centre.
     obox(c, h, yaw, mat, collide = true) {
       const cc = tp(this.rot, c);
+      if (this.rot === 'mz') yaw = -yaw;
       bucket(mat).addOBox(cc, h, yaw, (MAT_DEFS[mat] && MAT_DEFS[mat].uv) || 1);
       if (collide) for (const [x0, x1, z0, z1] of rasterRect(cc, h[0], h[2], yaw)) world.add([x0, cc[1] - h[1], z0], [x1, cc[1] + h[1], z1], 'angled').mat = mat;
     },
@@ -173,8 +189,8 @@ export function createKit(world) {
       for (const [p, q] of intervals) {
         if (q - p < 1e-4) continue;
         const e = 0.004;
-        if (axis === 'x') { B.collider([a, p, t0], [b, q, t1]); B.visual([a - e, p, t0], [b + e, q, t1], mat); }
-        else { B.collider([t0, p, a], [t1, q, b]); B.visual([t0, p, a - e], [t1, q, b + e], mat); }
+        if (axis === 'x') { B.collider([a, p, t0], [b, q, t1], undefined, mat); B.visual([a - e, p, t0], [b + e, q, t1], mat); }
+        else { B.collider([t0, p, a], [t1, q, b], undefined, mat); B.visual([t0, p, a - e], [t1, q, b + e], mat); }
       }
     }
     if (sill) for (const o of openings) {
@@ -359,7 +375,7 @@ export function createKit(world) {
       const rank = RANK[name] ?? 3;
       if (rank > 0) { mat.polygonOffset = true; mat.polygonOffsetFactor = -0.5 * rank; mat.polygonOffsetUnits = -2 * rank; }
       const mesh = new THREE.Mesh(bk.toGeometry(), mat);
-      mesh.castShadow = !['grass', 'sand', 'asphalt', 'tile', 'glass', 'afkglass', 'water'].includes(name);
+      mesh.castShadow = !['grass', 'sand', 'asphalt', 'tile', 'glass', 'afkglass', 'water', 'roofsheet', 'skylight', 'corrugated', 'shellconc', 'slab'].includes(name);
       mesh.receiveShadow = true;
       mesh.name = 'map-' + name;
       group.add(mesh);
@@ -413,12 +429,13 @@ export function createKit(world) {
 
 // Nav graph: `half` nodes (keys starting with 'a_') are mirrored to 'b_' by 180° rotation,
 // `centre` nodes are used as-is. Same-level nodes with a clear walking line are auto-linked.
-export function buildNav(world, { half, centre = {}, links = [], oneWay = [], maxLink = 13, noAuto = [] }) {
+export function buildNav(world, { half, centre = {}, links = [], oneWay = [], maxLink = 13, noAuto = [], mirror = null }) {
+  const twin = (p) => mirror === 'z' ? [p[0], p[1], -p[2]] : tp(2, p);
   const nodes = [], index = {};
   for (const [k, p] of Object.entries(half)) {
     index[k] = nodes.length; nodes.push({ id: k, p: [...p], links: [] });
     const kb = 'b' + k.slice(1);
-    index[kb] = nodes.length; nodes.push({ id: kb, p: tp(2, p), links: [] });
+    index[kb] = nodes.length; nodes.push({ id: kb, p: twin(p), links: [] });
   }
   for (const [k, p] of Object.entries(centre)) { index[k] = nodes.length; nodes.push({ id: k, p: [...p], links: [] }); }
   const link = (a, b) => { if (a == null || b == null) return; if (!nodes[a].links.includes(b)) nodes[a].links.push(b); };
@@ -450,4 +467,4 @@ export function buildNav(world, { half, centre = {}, links = [], oneWay = [], ma
   return { nodes, index };
 }
 
-export function mirrorList(list) { const out = []; for (const s of list) { out.push([...s]); out.push(tp(2, s)); } return out; }
+export function mirrorList(list, mirror = null) { const out = []; for (const s of list) { out.push([...s]); out.push(mirror === 'z' ? [s[0], s[1], -s[2]] : tp(2, s)); } return out; }

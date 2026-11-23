@@ -125,8 +125,23 @@ export function stepMovement(s, inp, dt, world) {
     }
   }
 
+  // --- ladders: push toward the ladder to climb, away to let go, nothing to hang
+  s.onLadder = false;
+  if (world.ladders && !jumped) {
+    const [mn, mx] = boxOf(s, tmpMin, tmpMax);
+    for (const L of world.ladders) {
+      if (mx[0] < L.min[0] || mn[0] > L.max[0] || mx[2] < L.min[2] || mn[2] > L.max[2] || mx[1] < L.min[1] || mn[1] > L.max[1]) continue;
+      const toward = wx * L.dir[0] + wz * L.dir[1];
+      if (toward < -0.2 || (s.onGround && toward <= 0.2)) break;
+      s.vel[1] = toward > 0.2 ? 4.4 : inp.crouch ? -3.2 : 0;
+      s.vel[0] *= 0.85; s.vel[2] *= 0.85;
+      s.onLadder = true; s.onGround = false; s.jumpsLeft = 1;
+      break;
+    }
+  }
+
   // --- gravity
-  if (!s.onGround || jumped) s.vel[1] -= MOVE.gravity * dt;
+  if ((!s.onGround || jumped) && !s.onLadder) s.vel[1] -= MOVE.gravity * dt;
 
   // --- clamp horizontal speed
   const hs = Math.hypot(s.vel[0], s.vel[2]);

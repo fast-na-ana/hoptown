@@ -75,7 +75,7 @@ button { font: inherit; cursor: pointer; }
 .live-tag { margin-left: auto; font-size: 11px; background: #e0322f; color: #fff; padding: 2px 8px; border: 2px solid var(--k); border-radius: 6px; animation: blinkdot 1.6s infinite; }
 #preview { flex: 1; width: 100%; height: 100%; min-height: 300px; display: block; background: #9fd0ff; }
 .win-foot { padding: 12px 14px 4px; background: var(--y); border-top: var(--bd); }
-.mapsel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.mapsel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
 .mapbtn { text-align: left; border: var(--bd); border-radius: 10px; background: #fff; padding: 7px 10px; box-shadow: 3px 3px 0 var(--k); color: var(--k); }
 .mapbtn small { display: block; font: 700 9.5px 'Space Mono', monospace; color: var(--g3); letter-spacing: 1px; }
 .mapbtn b { font-weight: 900; font-stretch: 115%; font-size: 15px; }
@@ -475,3 +475,4 @@ table.controls td:nth-child(odd) { white-space: nowrap; width: 1%; }
 /* carried charge shown next to the weapon slots */
 .slot.charge { background: #ff7a3d; }
 .slot.charge i { width: auto; padding: 0 3px; }
+#pause-map-seg { grid-template-columns: repeat(3, 1fr); }

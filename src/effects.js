@@ -334,6 +334,9 @@ export class Effects {
           const leaf = ['#c9862e', '#d9a13a', '#9fb94a', '#b8582c'][Math.floor(Math.random() * 4)];
           this.solid.add([x, cam.y + 4 + Math.random() * 6, z], [0.6 + Math.random() * 0.6, -0.9 - Math.random() * 0.4, (Math.random() - 0.5) * 0.6], leaf, 7, 0.11, { grav: 0, drag: 0 });
         } else this.glow.add([x, cam.y - 1 + Math.random() * 4, z], [(Math.random() - 0.5) * 0.15, 0.05, (Math.random() - 0.5) * 0.15], '#fff3c4', 4, 0.05, { grav: 0, drag: 0, alpha: 0.5 });
+      } else if (this.ambientKind === 'motes') {
+        // dust hanging in the light shafts of an indoor hall
+        this.glow.add([cam.x + Math.cos(a) * d * 0.6, 0.5 + Math.random() * 7, cam.z + Math.sin(a) * d * 0.6], [(Math.random() - 0.5) * 0.12, 0.04, (Math.random() - 0.5) * 0.12], '#fff1cf', 6, 0.045, { grav: 0, drag: 0, alpha: 0.45 });
       } else if (this.ambientKind === 'sand') {
         this.smokeSys.add([x, 0.15 + Math.random() * 0.6, z], [1.6 + Math.random() * 1.2, 0.05, 0.3 + Math.random() * 0.4], '#e6cf9c', 2.6, 0.5 + Math.random() * 0.5, { grav: 0, drag: 0.2, grow: 1.6, alpha: 0.22 });
         if (Math.random() < 0.3) this.solid.add([x, 0.2 + Math.random() * 1.5, z], [2.2 + Math.random(), 0.1, 0.4], '#d8bd84', 2.5, 0.035, { grav: 0.2, drag: 0 });

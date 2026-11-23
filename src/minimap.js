@@ -26,13 +26,14 @@ export class Minimap {
     const inv = this.g.world.boxes.filter(b => b.tag === 'invisible');
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
     for (const b of inv.length ? inv : boxes) { minX = Math.min(minX, b.max[0]); maxX = Math.max(maxX, b.min[0]); minZ = Math.min(minZ, b.max[2]); maxZ = Math.max(maxZ, b.min[2]); }
+    if (this.g.map.mmBounds) ({ minX, maxX, minZ, maxZ } = this.g.map.mmBounds);
     if (!isFinite(minX)) { minX = -40; maxX = 40; minZ = -30; maxZ = 30; }
     this.bounds = { minX, maxX, minZ, maxZ };
     const c = document.createElement('canvas');
     c.width = Math.ceil((maxX - minX) * SCALE); c.height = Math.ceil((maxZ - minZ) * SCALE);
     const g = c.getContext('2d');
     const desert = this.g.mapId === 'sunstone';
-    g.fillStyle = desert ? '#ead9b4' : '#dfe6d2'; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = desert ? '#ead9b4' : this.g.mapId === 'drill' ? '#dcdcd8' : '#dfe6d2'; g.fillRect(0, 0, c.width, c.height);
     const sorted = boxes.filter(b => b.tag !== 'invisible').sort((a, b) => a.max[1] - b.max[1]);
     for (const b of sorted) {
       const h = b.max[1];
