@@ -9,6 +9,8 @@ export const ITEM_ICONS = { armour: ARMOUR, kit: KIT, nade: ICONS.grenade };
 
 export const LOADOUT_KEYS = [...PRIMARIES, ...SECONDARIES];   // 1-4 primaries, 5-6 sidearms
 
+let closeKey = 'B';
+export function setPanelKey(k) { closeKey = k; }
 export function loadoutHtml(lo, pending, immediate) {
   const cur = pending || lo;
   const item = (w, i) => {
@@ -18,7 +20,7 @@ export function loadoutHtml(lo, pending, immediate) {
   return `<div class="gp-head"><h3>LOADOUT</h3><span class="mono">${pending && !immediate ? 'APPLIES ON NEXT SPAWN' : 'CLICK TO EQUIP'}</span></div>
     <div class="gp-sec">PRIMARY</div><div class="gp-grid">${PRIMARIES.map((w, i) => item(w, i)).join('')}</div>
     <div class="gp-sec">SIDEARM</div><div class="gp-grid">${SECONDARIES.map((w, i) => item(w, i + PRIMARIES.length)).join('')}</div>
-    <div class="gp-foot"><span>Click outside or press <kbd>B</kbd> to close</span><button type="button" class="gp-close">DONE</button></div>`;
+    <div class="gp-foot"><span>Click outside or press <kbd>${esc(closeKey)}</kbd> to close</span><button type="button" class="gp-close">DONE</button></div>`;
 }
 
 // items: [{ id, name, icon, price, owned, off, sub }]

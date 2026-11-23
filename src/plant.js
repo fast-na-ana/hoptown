@@ -347,7 +347,7 @@ export class PlantMode {
     const L = g.local;
     if (L.team) {
       const role = L.team === this.atk ? 'ATTACK' : 'DEFEND';
-      g.hud.announce(`ROUND ${this.round} · ${role}`, L.team === this.atk ? (this.ch.c === L.id ? 'You carry the charge. Plant it at A or B.' : 'Get the charge to a site. B to buy.') : 'Hold both sites. B to buy.');
+      g.hud.announce(`ROUND ${this.round} · ${role}`, L.team === this.atk ? (this.ch.c === L.id ? `You carry the charge. Hold ${g.hud.key('use')} at A or B to plant.` : `Get the charge to a site. ${g.hud.key('buy')} to buy.`) : `Hold both sites. ${g.hud.key('buy')} to buy.`);
       if (!g.panelOpen) g.setPanel('buy');
     }
     sfx.tick();

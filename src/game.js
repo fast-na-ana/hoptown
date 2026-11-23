@@ -941,7 +941,7 @@ export class Game {
     if (p.ms) this.spawn(p);              // owner teleports into / out of the box
     if (on && p.blink) { p.blink.dead = true; p.blink = null; }
     if (p.isLocal) {
-      if (on) this.hud.announce('AFK BOX', 'Press ENTER to rejoin the match');
+      if (on) this.hud.announce('AFK BOX', `Press ${this.hud.key('back2')} to rejoin the match`);
       else this.hud.announce('BACK IN!', 'Welcome back');
     } else this.hud.feedText(`${p.name} ${on ? 'moved to the AFK box' : 'is back in the match'}`, on ? '#aaa' : p.color);
   }
@@ -1492,12 +1492,12 @@ export class Game {
     // contextual prompt
     let prompt = '';
     const pAct = this.plant && L.alive ? this.plant.actionAvailable(L) : null;
-    if (L.alive && pAct && !this.plant.hold) prompt = pAct === 'plant' ? 'Hold <kbd>F</kbd> to PLANT the charge' : `Hold <kbd>F</kbd> to DEFUSE${L.inv && L.inv.kit ? ' (kit)' : ''}`;
-    else if (L.alive && this.plant && this.plant.ph === 'buy' && this.panelOpen !== 'buy') prompt = 'Press <kbd>B</kbd> to buy';
+    if (L.alive && pAct && !this.plant.hold) prompt = pAct === 'plant' ? `Hold ${h.kb('use')} to PLANT the charge` : `Hold ${h.kb('use')} to DEFUSE${L.inv && L.inv.kit ? ' (kit)' : ''}`;
+    else if (L.alive && this.plant && this.plant.ph === 'buy' && this.panelOpen !== 'buy') prompt = `Press ${h.kb('buy')} to buy`;
     else if (L.alive) {
-      if (blinkActive) prompt = 'Press <kbd>Q</kbd> to WARP to your disc';
-      else if (W.mag && L.mag[L.weapon] === 0 && !reloading) prompt = 'Press <kbd>R</kbd> to reload';
-      else if (this.match.phase === 'warmup' && this.match.round === 1) prompt = 'Press <kbd>H</kbd> for controls &amp; abilities';
+      if (blinkActive) prompt = `Press ${h.kb('blink')} to WARP to your disc`;
+      else if (W.mag && L.mag[L.weapon] === 0 && !reloading) prompt = `Press ${h.kb('reload')} to reload`;
+      else if (this.match.phase === 'warmup' && this.match.round === 1) prompt = `Press ${h.kb('help')} for controls &amp; abilities`;
     }
     h.prompt(prompt);
     if (this.helpUntil !== Infinity && this.time > this.helpUntil) { this.helpShown = false; this.helpUntil = Infinity; }

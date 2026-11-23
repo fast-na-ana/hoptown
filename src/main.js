@@ -5,6 +5,7 @@ import { LocalNet, RtcNet } from './net.js';
 import { COLORS, WEAPONS, PRIMARIES, SECONDARIES, DEFAULT_LOADOUT } from './config.js';
 import { ICONS } from './hud.js';
 import { ACTIONS, RISKY, loadBinds, buildMap, keyName } from './keybinds.js';
+import { setPanelKey } from './panels.js';
 import { DIFFICULTIES } from './bots.js';
 import { MenuPreview } from './preview.js';
 import { MAP_LIST, PLANT_MAPS } from './maps/index.js';
@@ -236,7 +237,7 @@ async function start(mode) {
   $('menu').style.display = 'none';
   game.hud.show(true);
   if (opts.roomCode) game.hud.feedText(`Online room ${opts.roomCode}. Press Esc to copy the invite link`, '#ffd60a');
-  game.hud.dropKey = keyName(binds.drop[0]);
+  applyKeyLabels();
   game.onKicked = () => { leaveToMenu('You were removed from the room by the host.'); };
   game.input.lastInput = performance.now();
   lock();
@@ -373,13 +374,13 @@ function setBind(id, slot, code) {
   if (code) for (const a of ACTIONS) binds[a.id] = binds[a.id].map(c => (c === code ? null : c));   // a key does one thing
   const cur = [...binds[id]]; cur[slot] = code; binds[id] = cur;
   for (const a of ACTIONS) { binds[a.id] = binds[a.id].filter(Boolean); }
-  store.set('binds', binds); keyMap = buildMap(binds); paintBinds();
+  store.set('binds', binds); keyMap = buildMap(binds); paintBinds(); applyKeyLabels();
 }
 $('binds').addEventListener('click', (e) => {
   const b = e.target.closest('.kb'); if (!b || b.disabled) return;
   rebinding = { id: b.dataset.id, slot: Math.min(+b.dataset.slot, binds[b.dataset.id].length) }; paintBinds();
 });
-$('binds-reset').onclick = () => { binds = loadBinds(null); store.set('binds', binds); keyMap = buildMap(binds); rebinding = null; paintBinds(); };
+$('binds-reset').onclick = () => { binds = loadBinds(null); store.set('binds', binds); keyMap = buildMap(binds); rebinding = null; paintBinds(); applyKeyLabels(); };
 document.addEventListener('keydown', (e) => {
   if (!rebinding) return;
   e.preventDefault(); e.stopImmediatePropagation();
@@ -388,6 +389,12 @@ document.addEventListener('keydown', (e) => {
   const r = rebinding; rebinding = null; setBind(r.id, r.slot, e.code);
 }, true);
 paintBinds();
+function applyKeyLabels() {
+  const labels = {};
+  for (const a of ACTIONS) labels[a.id] = binds[a.id] && binds[a.id][0] ? keyName(binds[a.id][0]) : '—';
+  setPanelKey(labels.buy);
+  if (game) game.hud.setKeys(labels);
+}
 
 const gameKeys = new Set(['Space', 'Tab', ...DIGITS, 'Enter']);
 document.addEventListener('keydown', (e) => {

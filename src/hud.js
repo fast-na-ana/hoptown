@@ -66,6 +66,27 @@ export class Hud {
     this.setSlots(['rifle', 'pistol', 'knife']);
   }
   show(v) { this.el.style.display = v ? 'block' : 'none'; }
+  // current key labels per action (from the player's keybinds)
+  key(id) { return (this.keys && this.keys[id]) || ({ use: 'F', buy: 'B', drop: 'X', reload: 'R', blink: 'Q', grenade: 'G', quickknife: 'V', help: 'H', map: 'M', scores: 'TAB', back2: 'ENTER', jump: 'SPACE', crouch: 'SHIFT', left: 'A', right: 'D', primary: '1', sidearm: '2', knife: '3' }[id]); }
+  kb(id) { return `<kbd>${esc(this.key(id))}</kbd>`; }
+  setKeys(labels) {
+    this.keys = labels; this.dropKey = this.key('drop');
+    const ab = { nade: 'grenade', blink: 'blink', melee: 'quickknife' };
+    for (const [el, act] of Object.entries(ab)) { const k = document.querySelector(`#ab-${el} .ab-key`); if (k) k.textContent = this.key(act); }
+    this._slots = null;
+    const kb = (id) => this.kb(id);
+    $('help').innerHTML = `<h4>HOW TO PLAY <span>${esc(this.key('help'))} to hide</span></h4><ul>
+      <li>${kb('jump')} jump · tap again in air = <b>double jump</b> · hold to <b>bunny hop</b></li>
+      <li>${kb('crouch')} while running = <b>slide</b> (speed boost). Jump out of a slide to keep it</li>
+      <li>${kb('left')}/${kb('right')} + mouse turn in the air = <b>air strafe</b> for more speed</li>
+      <li>${kb('grenade')} <b>Frag grenade</b> · blast knocks you back</li>
+      <li>${kb('blink')} <b>Blink</b> · throw the disc, press ${kb('blink')} again to <b>teleport</b> to it</li>
+      <li>${kb('quickknife')} <b>Quick knife</b> · very close range · one hit = one kill</li>
+      <li>${kb('primary')} primary · ${kb('sidearm')} sidearm · ${kb('knife')} knife · <kbd>RMB</kbd> aim / scope · ${kb('reload')} reload</li>
+      <li>${kb('buy')} loadout / buy menu · ${kb('use')} inspect, plant, defuse · ${kb('drop')} drop the charge</li>
+      <li>${kb('scores')} scores · ${kb('map')} big map · rebind keys in the menu's Controls tab</li>
+    </ul>`;
+  }
   // owned weapons in key order (1 primary, 2 sidearm, 3 knife)
   setSlots(list, charge = false) {
     const key = list.join(',') + (charge ? '+c' : '');
@@ -130,7 +151,8 @@ export class Hud {
     const b = $('ab-blink');
     this._cls(b, 'ready', a.blink === 'ready'); this._cls(b, 'active', a.blink === 'active'); this._cls(b, 'empty', a.blink === 'cooldown');
     this._set('ab-blink', '--p', (a.blink === 'cooldown' ? Math.round(a.blinkPct * 100) : 0) + '%');
-    this._set('ab-blink-sub', 'text', a.blink === 'active' ? 'Q again: WARP!' : a.blink === 'cooldown' ? `cooldown ${Math.ceil(a.blinkCd)}s` : 'throw · Q again warps');
+    const bk = this.key('blink');
+    this._set('ab-blink-sub', 'text', a.blink === 'active' ? `${bk} again: WARP!` : a.blink === 'cooldown' ? `cooldown ${Math.ceil(a.blinkCd)}s` : `throw · ${bk} again warps`);
     // knife
     const m = $('ab-melee');
     this._cls(m, 'ready', a.knifeReady); this._cls(m, 'empty', !a.knifeReady);
@@ -277,7 +299,7 @@ export class Hud {
     if (killerName === null) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
     el.style.display = 'flex';
     this._set('death-by', 'html', killerName ? `ELIMINATED BY <b style="color:${color}">${esc(killerName)}</b>` : 'YOU DIED');
-    this._set('death-timer', 'text', typeof respawnIn === 'string' ? respawnIn : respawnIn > 0 ? `Respawning in ${respawnIn.toFixed(1)}s · B to change loadout` : 'Respawning…');
+    this._set('death-timer', 'text', typeof respawnIn === 'string' ? respawnIn : respawnIn > 0 ? `Respawning in ${respawnIn.toFixed(1)}s · ${this.key('buy')} to change loadout` : 'Respawning…');
   }
   center(text) {
     const el = $('centerbig');
