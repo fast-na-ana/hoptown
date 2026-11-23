@@ -117,8 +117,10 @@ export function buildMap(world, scene) {
       }
       for (const [p, q] of intervals) {
         if (q - p < 1e-4) continue;
-        if (axis === 'x') B.box([a, p, t0], [b, q, t1], mat);
-        else B.box([t0, p, a], [t1, q, b], mat);
+        // colliders are exact; visuals overlap slightly to hide hairline seams between slices
+        const e = 0.004;
+        if (axis === 'x') { B.collider([a, p, t0], [b, q, t1]); B.visual([a - e, p, t0], [b + e, q, t1], mat); }
+        else { B.collider([t0, p, a], [t1, q, b]); B.visual([t0, p, a - e], [t1, q, b + e], mat); }
       }
     }
     // window sills (visual)

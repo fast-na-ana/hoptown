@@ -22,8 +22,8 @@ export const MOVE = {
   groundSpeed: 7.6,
   crouchSpeed: 3.6,
   adsSpeedMul: 0.72,
-  groundAccel: 11,
-  friction: 6.5,
+  groundAccel: 12,
+  friction: 5.6,
   stopSpeed: 2.5,
   airWishCap: 1.15,      // quake-style air control cap -> enables air strafing
   airAccel: 70,
@@ -45,15 +45,24 @@ export const WEAPONS = {
   rifle: {
     id: 'rifle', name: 'VX-9 Rifle', slot: 1, auto: true,
     interval: 0.092, damage: 22, headMul: 1.65, falloffStart: 28, falloffEnd: 55, minDamage: 15,
-    mag: 30, reload: 1.85, spreadHip: 0.018, spreadAds: 0.0035, bloomPerShot: 0.004, bloomMax: 0.03,
-    recoilPitch: 0.011, recoilYaw: 0.004, adsFov: 0.72, moveSpread: 0.025, airSpread: 0.05,
+    mag: 30, reload: 1.85, spreadHip: 0.018, spreadAds: 0.0035, bloomPerShot: 0.0028, bloomMax: 0.022,
+    recoilPitch: 0.0042, recoilYaw: 0.0016, adsFov: 0.72, moveSpread: 0.025, airSpread: 0.05,
   },
   pistol: {
     id: 'pistol', name: 'K-12 Sidearm', slot: 2, auto: false,
     interval: 0.15, damage: 31, headMul: 1.8, falloffStart: 18, falloffEnd: 40, minDamage: 20,
     mag: 12, reload: 1.15, spreadHip: 0.011, spreadAds: 0.003, bloomPerShot: 0.006, bloomMax: 0.025,
-    recoilPitch: 0.02, recoilYaw: 0.005, adsFov: 0.85, moveSpread: 0.012, airSpread: 0.03,
+    recoilPitch: 0.009, recoilYaw: 0.0022, adsFov: 0.85, moveSpread: 0.012, airSpread: 0.03,
   },
+  knife: {
+    id: 'knife', name: 'Arc Knife', slot: 3, melee: true, auto: false, interval: 0.5, mag: 0, reload: 0,
+    spreadHip: 0, spreadAds: 0, bloomPerShot: 0, bloomMax: 0, recoilPitch: 0, recoilYaw: 0, adsFov: 1, moveSpread: 0, airSpread: 0,
+  },
+};
+
+export const KNIFE = {
+  id: 'knife', name: 'Arc Knife', slot: 3,
+  range: 2.3, damage: 200, cooldown: 0.5, hitDelay: 0.07, cone: 0.55, speedMul: 1.08,
 };
 
 export const GRENADE = {

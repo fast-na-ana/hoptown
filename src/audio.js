@@ -91,6 +91,8 @@ export const sfx = {
   },
   blink(pos) { const d = spatial(pos, 40); if (!d) return; const t = ctx.currentTime; tone(d, t, 0.25, 1600, 200, 0.25, 'sine'); tone(d, t, 0.2, 400, 2400, 0.15, 'triangle'); },
   streak() { const d = spatial(null); if (!d) return; const t = ctx.currentTime; [523, 659, 784, 1046].forEach((f, i) => tone(d, t + i * 0.07, 0.2, f, f, 0.18, 'triangle')); },
+  swing(pos) { const d = spatial(pos, 20); if (!d) return; noiseBurst(d, ctx.currentTime, 0.16, 2600, 0.7, 0.35, 'highpass'); },
+  stab(pos) { const d = spatial(pos, 25); if (!d) return; const t = ctx.currentTime; noiseBurst(d, t, 0.12, 700, 1.2, 0.6, 'lowpass'); tone(d, t, 0.1, 180, 70, 0.4, 'triangle'); },
   tick() { const d = spatial(null); if (!d) return; tone(d, ctx.currentTime, 0.06, 880, 880, 0.2, 'sine'); },
   go() { const d = spatial(null); if (!d) return; tone(d, ctx.currentTime, 0.3, 1320, 1320, 0.25, 'sine'); },
 };

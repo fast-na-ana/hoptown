@@ -1,10 +1,10 @@
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({executablePath:'/usr/bin/google-chrome',headless:'new',args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const b = await puppeteer.launch({executablePath:'/usr/bin/google-chrome',headless:'new',protocolTimeout:600000,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 const errs = [];
 const p = await b.newPage(); await p.setViewport({width:1280,height:720});
 p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type()==='error') errs.push(m.text()); });
 await p.goto('http://localhost:8123/index.html?test', {waitUntil:'load'});
-await p.evaluate(() => { document.getElementById('bots').value = 6; document.getElementById('difficulty').value = 'hard'; window.__start('offline'); });
+await p.evaluate(() => { document.getElementById('bots').value = 6; document.getElementById('difficulty').value = 2; document.getElementById('difficulty').oninput(); window.__start('offline'); });
 const r = await p.evaluate(async () => {
   const g = window.__hoptown.game;
   const wait = async (sec) => { const t0 = g.time; while (g.time - t0 < sec) await new Promise(r=>setTimeout(r,16)); };

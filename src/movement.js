@@ -102,6 +102,7 @@ export function stepMovement(s, inp, dt, world) {
     if (!s.sliding) {
       let ws = s.crouching ? MOVE.crouchSpeed : MOVE.groundSpeed;
       if (inp.ads) ws *= MOVE.adsSpeedMul;
+      if (inp.speedMul) ws *= inp.speedMul;
       if (wl > 0) accelerate(s.vel, wx, wz, ws, MOVE.groundAccel, dt);
     } else if (wl > 0) {
       // slight steering while sliding

@@ -5,17 +5,23 @@ import { WEAPONS } from './config.js';
 
 export const BOT_NAMES = ['Sprocket', 'Rivet', 'Nova', 'Bolt', 'Pixel', 'Ziggy', 'Comet', 'Gizmo', 'Blitz', 'Orbit', 'Turbo', 'Echo'];
 
+export const DIFFICULTIES = ['easy', 'medium', 'hard', 'legendary'];
 const DIFF = {
-  easy:   { react: 0.6, err: 0.11, turn: 3.2, cone: 0.08, head: 0.1, view: 45, strafe: 0.6, nade: 0.05 },
-  normal: { react: 0.38, err: 0.06, turn: 5.5, cone: 0.05, head: 0.25, view: 60, strafe: 0.85, nade: 0.12 },
-  hard:   { react: 0.22, err: 0.032, turn: 9, cone: 0.035, head: 0.45, view: 80, strafe: 1, nade: 0.2 },
+  // react: seconds before first shot · err: initial aim error · turn: rad/s · cone: fire when within
+  // head: chance to aim for the head · spread: multiplier on weapon spread · pause: gaps between bursts
+  easy:      { react: 0.85, err: 0.16, turn: 2.4, cone: 0.06, head: 0.05, view: 38, strafe: 0.45, nade: 0.03, spread: 3.2, burst: 0.35, pause: 0.7, decay: 1.2 },
+  medium:    { react: 0.55, err: 0.1, turn: 3.6, cone: 0.05, head: 0.12, view: 52, strafe: 0.7, nade: 0.07, spread: 2.2, burst: 0.5, pause: 0.45, decay: 1.6 },
+  hard:      { react: 0.34, err: 0.06, turn: 5.5, cone: 0.04, head: 0.28, view: 68, strafe: 0.9, nade: 0.12, spread: 1.5, burst: 0.8, pause: 0.25, decay: 2.2 },
+  legendary: { react: 0.2, err: 0.035, turn: 9, cone: 0.035, head: 0.5, view: 85, strafe: 1, nade: 0.2, spread: 1.0, burst: 1.5, pause: 0.12, decay: 3 },
 };
+DIFF.normal = DIFF.medium;
 
 function angDiff(a, b) { let d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
 
 export class Bot {
   constructor(game, p, difficulty = 'normal') {
-    this.g = game; this.p = p; this.d = DIFF[difficulty] || DIFF.normal;
+    this.g = game; this.p = p; this.d = DIFF[difficulty] || DIFF.medium;
+    this.burstT = 0; this.pauseT = 0;
     this.path = []; this.pi = 0; this.target = null; this.lastSeen = null; this.lastSeenT = -99;
     this.reactUntil = 0; this.strafe = 1; this.strafeT = 0; this.err = [0, 0];
     this.nextThink = 0; this.stuckT = 0; this.checkPos = [0, 0, 0]; this.checkT = 0;
@@ -23,6 +29,8 @@ export class Bot {
     this.headAim = Math.random() < this.d.head;
     this.nextNade = 0;
   }
+
+  setDifficulty(name) { this.d = DIFF[name] || DIFF.medium; }
 
   // ---- navigation
   nearestNode(pos) {
@@ -161,7 +169,7 @@ export class Bot {
       desiredYaw = Math.atan2(-dx, -dz) + this.err[0];
       desiredPitch = Math.atan2(dy, dh) + this.err[1];
       // error decays while tracking
-      this.err[0] *= Math.exp(-dt * 2.2); this.err[1] *= Math.exp(-dt * 2.2);
+      this.err[0] *= Math.exp(-dt * this.d.decay); this.err[1] *= Math.exp(-dt * this.d.decay);
       // combat movement
       this.strafeT -= dt;
       if (this.strafeT <= 0) { this.strafe = Math.random() < 0.5 ? -1 : 1; this.strafeT = 0.4 + Math.random() * 0.9; if (Math.random() < 0.18 * this.d.strafe) this.wantJump = true; }
@@ -178,11 +186,18 @@ export class Bot {
       const yawErr = Math.abs(angDiff(p.yaw, desiredYaw - this.err[0]));
       const pitchErr = Math.abs(p.pitch - (desiredPitch - this.err[1]));
       const cone = this.d.cone + 0.4 / Math.max(3, dist);
-      if (g.time > this.reactUntil && yawErr < cone && pitchErr < cone && g.match.phase === 'play' && g.canShoot(p)) {
+      // burst / pause rhythm so lower difficulties don't laser you
+      if (this.pauseT > 0) this.pauseT -= dt;
+      else { this.burstT += dt; if (this.burstT > this.d.burst * (0.6 + Math.random() * 0.8)) { this.burstT = 0; this.pauseT = this.d.pause * (0.6 + Math.random() * 0.8); } }
+      if (dist < 2.1 && g.match.phase === 'play' && g.time > this.reactUntil) {
+        g.melee(p, Math.atan2(-dx, -dz), Math.atan2(dy, dh));
+      } else if (g.time > this.reactUntil && this.pauseT <= 0 && yawErr < cone && pitchErr < cone && g.match.phase === 'play' && g.canShoot(p)) {
         const W = WEAPONS[p.weapon];
-        if (W.auto || Math.random() < 0.35) {
+        if (W.auto || Math.random() < 0.3) {
           const eyeNow = g.eyeOf(p);
+          p.spreadMul = this.d.spread;
           g.fire(p, p.yaw, p.pitch, 0.2, eyeNow);
+          p.spreadMul = 1;
           p.pitch += W.recoilPitch * 0.5;
         }
       }

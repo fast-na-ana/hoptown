@@ -3,6 +3,7 @@ import { Game } from './game.js';
 import { initAudio, setVolume } from './audio.js';
 import { LocalNet, RtcNet } from './net.js';
 import { COLORS } from './config.js';
+import { DIFFICULTIES } from './bots.js';
 import { stepMovement, makeMoveState, emptyInput } from './movement.js';
 
 const $ = (id) => document.getElementById(id);
@@ -42,7 +43,11 @@ COLORS.forEach(c => {
 });
 $('bots').value = store.get('bots', 5); $('bots-val').textContent = $('bots').value;
 $('bots').oninput = () => { $('bots-val').textContent = $('bots').value; };
-$('difficulty').value = store.get('difficulty', 'normal');
+const DIFF_LABELS = ['Easy', 'Medium', 'Hard', 'Legendary'];
+let diffIdx = Math.max(0, DIFFICULTIES.indexOf(store.get('difficulty', 'medium')));
+if (diffIdx < 0) diffIdx = 1;
+$('difficulty').value = diffIdx; $('difficulty-val').textContent = DIFF_LABELS[diffIdx];
+$('difficulty').oninput = () => { diffIdx = +$('difficulty').value; $('difficulty-val').textContent = DIFF_LABELS[diffIdx]; store.set('difficulty', DIFFICULTIES[diffIdx]); };
 $('room').value = params.get('room') || '';
 
 function bindRange(id, key, fmt = (v) => v) {
@@ -60,8 +65,8 @@ function commonOpts() {
   const name = ($('name').value || 'Player').trim().slice(0, 16) || 'Player';
   store.set('name', name);
   store.set('bots', +$('bots').value);
-  store.set('difficulty', $('difficulty').value);
-  return { name, color, settings, bots: +$('bots').value, difficulty: $('difficulty').value };
+  store.set('difficulty', DIFFICULTIES[diffIdx]);
+  return { name, color, settings, bots: +$('bots').value, difficulty: DIFFICULTIES[diffIdx] };
 }
 
 function randRoom() { return Math.random().toString(36).slice(2, 7).toUpperCase(); }
@@ -102,6 +107,12 @@ $('quit').onclick = () => {
   $('pause').style.display = 'none'; $('hud').style.display = 'none'; $('menu').style.display = 'flex';
   const url = new URL(location.href); url.searchParams.delete('room'); history.replaceState(null, '', url);
 };
+$('pause-diff').oninput = () => {
+  diffIdx = +$('pause-diff').value; $('pause-diff-val').textContent = DIFF_LABELS[diffIdx];
+  $('difficulty').value = diffIdx; $('difficulty-val').textContent = DIFF_LABELS[diffIdx];
+  store.set('difficulty', DIFFICULTIES[diffIdx]);
+  if (game && game.isHost) game.setDifficulty(DIFFICULTIES[diffIdx]);
+};
 $('pause-bots').oninput = () => { $('pause-bots-val').textContent = $('pause-bots').value; if (game && game.isHost) game.setBotCount(+$('pause-bots').value); store.set('bots', +$('pause-bots').value); };
 if (params.get('room')) $('room-hint').textContent = 'You were invited to room ' + params.get('room') + ' — press Join.';
 
@@ -119,6 +130,7 @@ document.addEventListener('pointerlockchange', () => {
     game.input.keys.clear(); game.input.mouseL = false; game.input.mouseR = false;
     $('pause').style.display = 'flex';
     $('pause-bots').value = game.botCount; $('pause-bots-val').textContent = game.botCount;
+    const di = Math.max(0, DIFFICULTIES.indexOf(game.difficulty)); $('pause-diff').value = di; $('pause-diff-val').textContent = DIFF_LABELS[di];
     $('pause-bots-row').style.display = game.isHost ? '' : 'none';
     $('pause-room').textContent = game.roomCode ? `Room ${game.roomCode}` : 'Offline match vs bots';
     $('copy-link').style.display = game.roomCode ? '' : 'none';
@@ -142,7 +154,7 @@ document.addEventListener('mouseup', (e) => {
 });
 document.addEventListener('contextmenu', (e) => { if (game) e.preventDefault(); });
 document.addEventListener('wheel', (e) => { if (game && document.pointerLockElement === canvas) game.input.pressed.add('wheel'); }, { passive: true });
-const gameKeys = new Set(['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyR', 'KeyC', 'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'ControlLeft']);
+const gameKeys = new Set(['Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyR', 'KeyC', 'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'KeyV', 'KeyH', 'ControlLeft']);
 document.addEventListener('keydown', (e) => {
   if (!game) return;
   if (document.activeElement && document.activeElement.tagName === 'INPUT') return;

@@ -1,6 +1,6 @@
 // Core game: players, combat, projectiles, match flow, networking glue and rendering.
 import * as THREE from 'three';
-import { SIM_DT, PLAYER, MOVE, WEAPONS, GRENADE, BLINK, MATCH, STREAKS, COLORS } from './config.js';
+import { SIM_DT, PLAYER, MOVE, WEAPONS, GRENADE, BLINK, MATCH, STREAKS, COLORS, KNIFE } from './config.js';
 import { World, rayBox } from './physics.js';
 import { buildMap } from './map.js';
 import { makeMoveState, emptyInput, stepMovement, findFreeSpot } from './movement.js';
@@ -27,11 +27,12 @@ export class Game {
     this.projectiles = [];
     this.bots = [];
     this.botCount = opts.bots ?? 5;
-    this.difficulty = opts.difficulty || 'normal';
+    this.difficulty = opts.difficulty || 'medium';
+    this.helpShown = true; this.helpUntil = 14;
     this.nextProjId = 1;
     this.acc = 0;
     this.input = { keys: new Set(), pressed: new Set(), mouseL: false, mouseR: false, clickL: false, dx: 0, dy: 0 };
-    this.view = { yaw: 0, pitch: 0, recoil: 0, recoilYaw: 0, shake: 0, land: 0, roll: 0, fovKick: 0, ads: 0 };
+    this.view = { yaw: 0, pitch: 0, recoil: 0, recoilYaw: 0, shake: 0, land: 0, roll: 0, fovKick: 0, ads: 0, step: 0 };
     this.match = { phase: 'warmup', t: MATCH.warmup, round: 1, winner: null, killLimit: MATCH.killLimit, roundTime: MATCH.roundTime };
     this.lastMatchSend = 0; this.lastStateSend = 0; this.lastRosterSend = 0;
     this.paused = false;
@@ -40,7 +41,7 @@ export class Game {
     this.world = new World();
     this.map = buildMap(this.world, this.scene);
     this.effects = new Effects(this.scene);
-    this.vm = new ViewModel(opts.color);
+    this.vm = new ViewModel(opts.color, renderer);
     this.hud = new Hud();
 
     this.local = this.addPlayer(this.selfId, { name: opts.name, color: opts.color, isLocal: true, owner: this.selfId });
@@ -94,7 +95,7 @@ export class Game {
       prevPos: [0, 0, 0], rpos: [0, -50, 0], rvel: [0, 0, 0], rc: false, rg: true, snaps: [],
       yaw: 0, pitch: 0, hp: PLAYER.maxHealth, alive: false, respawnAt: 0, protectUntil: 0,
       weapon: 'rifle', mag: { rifle: WEAPONS.rifle.mag, pistol: WEAPONS.pistol.mag }, reloadUntil: 0, nextShot: 0, bloom: 0,
-      nades: GRENADE.max, nadeT: 0, blinkCd: 0, blink: null,
+      nades: GRENADE.max, nadeT: 0, blinkCd: 0, blink: null, nextMelee: 0,
       kills: 0, deaths: 0, score: 0, streak: 0, best: 0, wins: 0, lastHurt: -99, lastSeen: now(), killedBy: null,
       avatar: null,
     };
@@ -148,7 +149,7 @@ export class Game {
     p.pitch = 0;
     if (p.isLocal) {
       this.view.yaw = p.yaw; this.view.pitch = 0; this.view.recoil = 0;
-      this.vm.setWeapon('rifle'); this.vm.cancelReload();
+      this.vm.setWeapon('rifle', true); this.vm.cancelReload(); this.vm._start('equip', 0.4);
       this.hud.death(null);
     }
     if (this.net) this.net.send('spawn', { id: p.id, p: spot.map(r2) });
@@ -174,6 +175,7 @@ export class Game {
   }
 
   setBotCount(n) { this.botCount = n; this._ensureBots(); }
+  setDifficulty(d) { this.difficulty = d; for (const b of this.bots) b.setDifficulty(d); if (this.net && this.isHost) this._sendMatch(); }
 
   // ---------------------------------------------------------------- combat
   forward(yaw, pitch) {
@@ -189,7 +191,7 @@ export class Game {
     const sp = Math.hypot(vel[0], vel[2]);
     if (!onGround) s += W.airSpread * (1 - adsAmt * 0.5);
     else if (sp > 1) s += W.moveSpread * Math.min(1, sp / 7) * (1 - adsAmt * 0.6);
-    return s;
+    return s * (p.spreadMul || 1);
   }
 
   canShoot(p) {
@@ -231,7 +233,7 @@ export class Game {
     const from = muzzle || eye;
     this.effects.tracer(from, point);
     sfx.shot(p.weapon, p.isLocal ? null : this.posOf(p));
-    if (!p.isLocal && p.avatar) this.effects.muzzleFlash(from, 0.5);
+    if (!p.isLocal && p.avatar) { this.effects.muzzleFlash(from, 0.5); p.avatar.shoot(); }
     if (target) {
       const dist = bestT;
       let dmg = W.damage;
@@ -261,6 +263,7 @@ export class Game {
 
   reload(p) {
     const W = WEAPONS[p.weapon];
+    if (W.melee) return;
     if (p.mag[p.weapon] >= W.mag || this.time < p.reloadUntil || !p.alive) return;
     p.reloadUntil = this.time + W.reload;
     p.reloadWeapon = p.weapon;
@@ -274,6 +277,39 @@ export class Game {
     p.nextShot = Math.max(p.nextShot, this.time + 0.22);
     p.bloom = 0;
     if (p.isLocal) this.vm.setWeapon(id);
+  }
+
+  melee(p, yaw, pitch) {
+    if (!p.alive || this.time < p.nextMelee || this.match.phase === 'end') return false;
+    p.nextMelee = this.time + KNIFE.cooldown;
+    p.nextShot = Math.max(p.nextShot, this.time + (p.weapon === 'knife' ? 0 : 0.32));
+    if (this.time < p.reloadUntil) { p.reloadUntil = 0; if (p.isLocal) this.vm.cancelReload(); }
+    p.protectUntil = 0;
+    const eye = this.eyeOf(p), d = this.forward(yaw, pitch);
+    let best = null, bestD = Infinity;
+    for (const o of this.players.values()) {
+      if (o === p || !o.alive) continue;
+      const op = this.posOf(o), h = this.crouchOf(o) ? PLAYER.crouchHeight : PLAYER.height;
+      // closest point on the target's vertical segment to our eye
+      const cy = Math.max(op[1] + 0.2, Math.min(op[1] + h - 0.1, eye[1]));
+      const v = [op[0] - eye[0], cy - eye[1], op[2] - eye[2]];
+      const dist = Math.hypot(...v);
+      if (dist > KNIFE.range + PLAYER.radius) continue;
+      const cos = dist > 0.01 ? (v[0] * d[0] + v[1] * d[1] + v[2] * d[2]) / dist : 1;
+      if (Math.acos(Math.max(-1, Math.min(1, cos))) > KNIFE.cone && dist > 0.9) continue;
+      if (!this.world.lineOfSight(eye, [op[0], cy, op[2]])) continue;
+      if (dist < bestD) { bestD = dist; best = o; }
+    }
+    sfx.swing(p.isLocal ? null : this.posOf(p));
+    if (!p.isLocal && p.avatar) p.avatar.melee();
+    if (this.net && (p.isLocal || p.isBot)) this.net.send('melee', { id: p.id });
+    if (best) {
+      const bp = this.posOf(best);
+      this.effects.blood([bp[0], bp[1] + 1.1, bp[2]], best.color);
+      sfx.stab(p.isLocal ? null : bp);
+      this.applyHit(p, best, KNIFE.damage, false, 'knife');
+    }
+    return true;
   }
 
   ownsDamage(target) { return target.isLocal || (target.isBot && target.owner === this.selfId); }
@@ -579,6 +615,7 @@ export class Game {
       if (!p || p.ms) return;
       this.effects.tracer(d.o, d.e);
       this.effects.muzzleFlash(d.o, 0.5);
+      if (p.avatar) p.avatar.shoot();
       this.effects.impact(d.e, null);
       sfx.shot(d.w, d.o);
     });
@@ -596,6 +633,12 @@ export class Game {
       this.effects.ring([d.b[0], d.b[1] + 1, d.b[2]], col);
       sfx.blink(d.b);
       if (p && !p.ms) { p.snaps.length = 0; p.rpos = [...d.b]; }
+    });
+    net.on('melee', (d) => {
+      const p = this.players.get(d.id);
+      if (!p || p.ms) return;
+      if (p.avatar) p.avatar.melee();
+      sfx.swing(this.posOf(p));
     });
     net.on('ping', (d, from) => net.send('pong', d, from));
     net.on('pong', (d, from) => { const p = this.players.get(from); if (p) p.ping = Math.round((now() - d) * 1000); });
@@ -631,12 +674,12 @@ export class Game {
 
   _stateOf(p) {
     const m = p.ms;
-    return { id: p.id, p: m.pos.map(r2), v: m.vel.map(r2), y: r2(p.yaw), pi: r2(p.pitch), c: m.crouching ? 1 : 0, g: m.onGround ? 1 : 0, a: p.alive ? 1 : 0, w: p.weapon, hp: Math.round(p.hp) };
+    return { id: p.id, p: m.pos.map(r2), v: m.vel.map(r2), y: r2(p.yaw), pi: r2(p.pitch), c: m.crouching ? 1 : 0, g: m.onGround ? 1 : 0, s: m.sliding ? 1 : 0, a: p.alive ? 1 : 0, w: p.weapon, hp: Math.round(p.hp) };
   }
 
   _pushSnap(p, d) {
     p.lastSeen = now();
-    p.snaps.push({ t: now(), p: d.p, y: d.y, pi: d.pi, c: d.c, g: d.g, v: d.v });
+    p.snaps.push({ t: now(), p: d.p, y: d.y, pi: d.pi, c: d.c, g: d.g, v: d.v, s: d.s });
     if (p.snaps.length > 30) p.snaps.shift();
     if (d.a && !p.alive) p.alive = true;
     if (!d.a && p.alive) p.alive = false;
@@ -663,7 +706,7 @@ export class Game {
     let dy = b.y - a.y; if (dy > Math.PI) dy -= Math.PI * 2; if (dy < -Math.PI) dy += Math.PI * 2;
     p.yaw = a.y + dy * Math.max(0, Math.min(1, k));
     p.pitch = a.pi + (b.pi - a.pi) * Math.max(0, Math.min(1, k));
-    p.rc = !!b.c; p.rg = !!b.g; p.rvel = b.v;
+    p.rc = !!b.c; p.rg = !!b.g; p.rs = !!b.s; p.rvel = b.v;
   }
 
   // ---------------------------------------------------------------- main update
@@ -696,16 +739,22 @@ export class Game {
     if (canAct) {
       if (pressed.has('Digit1')) this.switchWeapon(L, 'rifle');
       if (pressed.has('Digit2')) this.switchWeapon(L, 'pistol');
-      if (pressed.has('wheel')) this.switchWeapon(L, L.weapon === 'rifle' ? 'pistol' : 'rifle');
+      if (pressed.has('Digit3')) this.switchWeapon(L, 'knife');
+      if (pressed.has('wheel')) this.switchWeapon(L, { rifle: 'pistol', pistol: 'knife', knife: 'rifle' }[L.weapon]);
+      if (pressed.has('KeyV') && L.weapon !== 'knife') { if (this.melee(L, aimYaw, aimPitch)) this.vm.quickKnife(); }
       if (pressed.has('KeyR')) this.reload(L);
       if (pressed.has('KeyG')) this.throwGrenade(L, aimYaw, aimPitch);
       if (pressed.has('KeyQ') || pressed.has('KeyE')) this.blinkAction(L, aimYaw, aimPitch);
       const W = WEAPONS[L.weapon];
       const wantFire = inputActive && (W.auto ? inp.mouseL : inp.clickL);
-      if (wantFire && this.match.phase !== 'end') {
+      if (W.melee) {
+        if (inputActive && inp.mouseL && this.match.phase !== 'end' && this.melee(L, aimYaw, aimPitch)) this.vm.slash();
+        inp.clickL = false;
+      } else if (this.vm.busy) {
+        inp.clickL = false;
+      } else if (wantFire && this.match.phase !== 'end') {
         if (this.canShoot(L)) {
-          this.vm.update(0, { ads: this.view.ads > 0.5, speed: 0, onGround: true, mouseDX: 0, mouseDY: 0, sliding: false, t: this.time });
-          const muzzle = this._vmMuzzleWorld();
+                    const muzzle = this._vmMuzzleWorld();
           this.fire(L, aimYaw, aimPitch, this.view.ads, muzzle);
           this.vm.fire(L.weapon);
           const rk = 1 - this.view.ads * 0.35;
@@ -718,12 +767,13 @@ export class Game {
     } else inp.clickL = false;
     if (!(inp.mouseL && inputActive)) {
       L.bloom = Math.max(0, L.bloom - dt * 0.12);
-      this.view.recoil *= Math.exp(-dt * 7);
-      this.view.recoilYaw *= Math.exp(-dt * 7);
+      this.view.recoil *= Math.exp(-dt * 9);
+      this.view.recoilYaw *= Math.exp(-dt * 9);
     } else {
-      this.view.recoil *= Math.exp(-dt * 1.2);
-      this.view.recoilYaw *= Math.exp(-dt * 1.5);
+      this.view.recoil *= Math.exp(-dt * 3.2);
+      this.view.recoilYaw *= Math.exp(-dt * 3.5);
     }
+    if (pressed.has('KeyH')) { this.helpShown = !this.helpShown; this.helpUntil = Infinity; }
     inp.pressed.clear();
 
     // --- reload completion & utility timers for simulated players
@@ -749,6 +799,7 @@ export class Game {
       mvIn.crouch = keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyC') || keys.has('ControlLeft');
       mvIn.yaw = this.view.yaw;
       mvIn.ads = this.view.ads > 0.5;
+      mvIn.speedMul = L.weapon === 'knife' ? KNIFE.speedMul : 1;
     }
     this.acc += dt;
     let steps = 0;
@@ -757,6 +808,10 @@ export class Game {
       if (L.alive) {
         L.prevPos = [...L.ms.pos];
         stepMovement(L.ms, mvIn, SIM_DT, this.world);
+        if (L.ms.events.includes('step') || (L.ms.onGround && L.ms.pos[1] - L.prevPos[1] > 0.08 && L.ms.pos[1] - L.prevPos[1] < 0.6)) {
+          const dy = L.ms.pos[1] - L.prevPos[1];
+          if (dy > 0.05) this.view.step = Math.max(-0.6, this.view.step - dy);
+        }
         this._moveEvents(L);
         if (L.ms.pos[1] < this.map.bounds.minY) this.kill(L, L.id, 'fall', false);
       }
@@ -797,9 +852,7 @@ export class Game {
       const pos = this.posOf(p);
       const vel = p.ms ? p.ms.vel : p.rvel;
       const air = p.ms ? !p.ms.onGround : !p.rg;
-      p.avatar.update(dt, pos, p.yaw, p.pitch, Math.hypot(vel[0], vel[2]), this.crouchOf(p), air, p.alive);
-      // spawn protection shimmer
-      p.avatar.root.traverse(o => { if (o.isMesh) o.material.transparent = false; });
+      p.avatar.update(dt, { pos, yaw: p.yaw, pitch: p.pitch, vel, crouched: this.crouchOf(p), airborne: air, sliding: p.ms ? p.ms.sliding : p.rs, alive: p.alive, weapon: p.weapon });
     }
 
     this._updateCamera(dt, mdx, mdy);
@@ -843,14 +896,15 @@ export class Game {
       v.eyeH = v.eyeH ?? PLAYER.eye;
       v.eyeH += ((L.ms.crouching ? PLAYER.crouchEye : PLAYER.eye) - v.eyeH) * Math.min(1, dt * 14);
       v.land *= Math.exp(-dt * 9);
-      cam.position.set(p[0], p[1] + v.eyeH - v.land, p[2]);
+      v.step *= Math.exp(-dt * 14);
+      cam.position.set(p[0], p[1] + v.eyeH - v.land + v.step, p[2]);
       const sp = Math.hypot(L.ms.vel[0], L.ms.vel[2]);
       v.roll += ((L.ms.sliding ? 0.06 : 0) - v.roll) * Math.min(1, dt * 8);
       v.fovKick += (Math.max(0, sp - 8) * 0.9 - v.fovKick) * Math.min(1, dt * 4);
       cam.rotation.set(v.pitch + v.recoil, v.yaw + v.recoilYaw, v.roll);
       const adsMul = 1 + (WEAPONS[L.weapon].adsFov - 1) * v.ads;
       cam.fov = (baseFov + v.fovKick * (1 - v.ads)) * adsMul;
-      this.vm.update(dt, { ads: v.ads > 0.5, speed: sp, onGround: L.ms.onGround, mouseDX: mdx, mouseDY: mdy, sliding: L.ms.sliding, t: this.time });
+      this.vm.update(dt, { ads: v.ads > 0.5, speed: sp, onGround: L.ms.onGround, mouseDX: mdx, mouseDY: mdy, sliding: L.ms.sliding, vy: L.ms.vel[1] });
       this.deathCam = null;
     } else if (this.deathCam) {
       const dc = this.deathCam; dc.t += dt;
@@ -883,18 +937,34 @@ export class Game {
   _updateHud(dt, keys) {
     const L = this.local, h = this.hud;
     const W = WEAPONS[L.weapon];
-    h.setHealth(L.hp, PLAYER.maxHealth);
-    h.setAmmo(W.name, L.mag[L.weapon], W.mag, this.time < L.reloadUntil);
-    h.setUtility(L.nades, GRENADE.max, GRENADE.rechargeTime - L.nadeT, L.blinkCd, BLINK.cooldown, !!(L.blink && !L.blink.dead));
-    h.setCrosshair(this.spreadFor(L, this.view.ads), L.alive && this.view.ads < 0.6);
-    h.setSpeed(L.alive ? Math.hypot(L.ms.vel[0], L.ms.vel[2]) : 0);
+    const reloading = this.time < L.reloadUntil;
+    h.setVitals(L.hp, PLAYER.maxHealth, L.alive ? Math.hypot(L.ms.vel[0], L.ms.vel[2]) : 0);
+    h.setWeapon(L.weapon, W.name, L.mag[L.weapon] ?? 0, W.mag, reloading, reloading ? 1 - (L.reloadUntil - this.time) / W.reload : 0);
+    const blinkActive = !!(L.blink && !L.blink.dead);
+    h.setAbilities({
+      nades: L.nades, nadeMax: GRENADE.max, nadePct: L.nadeT / GRENADE.rechargeTime, nadeLeft: GRENADE.rechargeTime - L.nadeT,
+      blink: blinkActive ? 'active' : L.blinkCd > 0 ? 'cooldown' : 'ready', blinkPct: L.blinkCd / BLINK.cooldown, blinkCd: L.blinkCd,
+      knifeReady: this.time >= L.nextMelee,
+    });
+    h.setCrosshair(this.spreadFor(L, this.view.ads), L.alive && this.view.ads < 0.6, L.weapon === 'knife');
     h.setStreak(L.streak);
+    // contextual prompt
+    let prompt = '';
+    if (L.alive) {
+      if (blinkActive) prompt = 'Press <kbd>Q</kbd> to WARP to your disc';
+      else if (W.mag && L.mag[L.weapon] === 0 && !reloading) prompt = 'Press <kbd>R</kbd> to reload';
+      else if (this.match.phase === 'warmup' && this.match.round === 1) prompt = 'Press <kbd>H</kbd> for controls &amp; abilities';
+    }
+    h.prompt(prompt);
+    if (this.helpUntil !== Infinity && this.time > this.helpUntil) { this.helpShown = false; this.helpUntil = Infinity; }
+    h.help(this.helpShown && this.match.phase !== 'end');
     const ranked = this.ranking();
-    const leader = ranked[0];
-    h.setTop({
+    const rank = ranked.indexOf(L) + 1;
+    const top = ranked[0] === L ? null : ranked[0];
+    h.setMatch({
       timeLeft: this.match.t, round: this.match.round, phase: this.match.phase, myKills: L.kills, killLimit: this.match.killLimit,
-      leaderName: leader && leader !== L ? leader.name : (ranked[1] ? `2nd: ${ranked[1].name}` : ''), leaderKills: leader && leader !== L ? leader.kills : (ranked[1] ? ranked[1].kills : 0),
-      roomCode: this.roomCode, players: this.players.size - this.bots.length - [...this.players.values()].filter(p => p.isBot && !p.ms).length, isHost: this.net && this.isHost,
+      rank, total: ranked.length, leaderName: top ? top.name : '', leaderKills: top ? top.kills : 0, leaderColor: top ? top.color : '#fff',
+      roomCode: this.roomCode, players: [...this.players.values()].filter(p => !p.isBot).length, isHost: this.net && this.isHost,
     });
     if (!L.alive && this.match.phase !== 'end') {
       const k = L.killedBy && this.players.get(L.killedBy);

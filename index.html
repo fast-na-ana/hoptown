@@ -21,8 +21,7 @@
       <div class="panel">
         <h3>Play vs Bots</h3>
         <div class="row"><label>Bots <b id="bots-val"></b></label><input id="bots" type="range" min="0" max="9" step="1"></div>
-        <div class="row"><label>Difficulty</label>
-          <select id="difficulty"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
+        <div class="row"><label>Difficulty <b id="difficulty-val"></b></label><input id="difficulty" type="range" min="0" max="3" step="1"></div>
         <button id="play-bots" class="big">PLAY</button>
       </div>
       <div class="panel">
@@ -46,8 +45,10 @@
       <table class="controls">
         <tr><td>WASD</td><td>Move</td><td>Mouse</td><td>Aim · LMB fire · RMB aim down sights</td></tr>
         <tr><td>Space</td><td>Jump · press again in air to double jump · hold to bunny hop</td><td>Shift / C</td><td>Crouch · while running = slide</td></tr>
-        <tr><td>1 / 2 / Wheel</td><td>Rifle / Pistol</td><td>R</td><td>Reload</td></tr>
+        <tr><td>1 / 2 / 3 / Wheel</td><td>Rifle / Pistol / Knife</td><td>R</td><td>Reload</td></tr>
         <tr><td>G</td><td>Grenade</td><td>Q (or E)</td><td>Throw blink disc · press again to teleport to it</td></tr>
+        <tr><td>V</td><td>Quick knife (one-hit kill, very close)</td><td>3</td><td>Hold knife (move faster)</td></tr>
+        <tr><td>H</td><td>Show / hide the in-game help</td><td></td><td></td></tr>
         <tr><td>Tab</td><td>Scoreboard</td><td>Esc</td><td>Menu</td></tr>
       </table>
       <p class="hint">Tips: strafe (A/D) while turning the mouse in the air to gain speed. Slide-jump keeps momentum. Cyan pads launch you onto the roofs.</p>
@@ -58,34 +59,58 @@
 <div id="hud" style="display:none">
   <div id="vignette"></div>
   <div id="dmg-layer"></div>
+
+  <div id="match">
+    <div class="m-top"><span id="m-round">ROUND 1</span><span id="m-phase">FREE FOR ALL</span></div>
+    <div class="m-mid"><div id="timer">0:00</div><div class="m-score"><span class="lbl">KILLS</span><b id="m-kills">0</b><span class="of">/ <span id="m-goal">20</span></span></div></div>
+    <div class="m-bar"><i id="m-bar"></i></div>
+    <div class="m-bot"><span id="m-rank"></span><span id="m-leader"></span></div>
+  </div>
+  <div id="room-pill"></div>
+
+  <div id="killfeed"></div>
+
   <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="c"></i></div>
   <div id="hitmarker"></div>
-  <div id="speed"></div>
-  <div id="topbar">
-    <div id="round"></div>
-    <div id="timer"></div>
-    <div id="scoreline"><span>YOU <b id="score-me">0</b> / <span id="score-goal">20</span></span><span id="score-leader"></span></div>
-  </div>
-  <div id="room"></div>
-  <div id="killfeed"></div>
-  <div id="streak"></div>
+  <div id="prompt"></div>
   <div id="announce"></div>
   <div id="notice"></div>
   <div id="centerbig"></div>
-  <div id="bottom-left">
-    <div id="hp-num">100</div>
-    <div id="hp-bar"><div id="hp-fill"></div></div>
+
+  <div id="streak"><span class="flame"></span><div><small>STREAK</small><b id="streak-n">0</b></div></div>
+
+  <div id="vitals">
+    <div class="hp-row"><span class="plus">+</span><b id="hp-num">100</b><span class="spd"><b id="speed">0.0</b> m/s</span></div>
+    <div id="hp-bar"><div id="hp-fill"></div><div class="ticks"></div></div>
   </div>
-  <div id="bottom-right">
+
+  <div id="abilities"></div>
+
+  <div id="weapon">
+    <div id="slots"></div>
     <div id="wpn-name"></div>
     <div id="ammo"></div>
-    <div id="util"><span id="nades"></span><span id="blink"></span></div>
   </div>
+
+  <div id="help">
+    <h4>HOW TO PLAY <span>H to hide</span></h4>
+    <ul>
+      <li><kbd>Space</kbd> jump · tap again in air = <b>double jump</b> · hold to <b>bunny hop</b></li>
+      <li><kbd>Shift</kbd> while running = <b>slide</b> (speed boost). Jump out of a slide to keep it</li>
+      <li><kbd>A</kbd>/<kbd>D</kbd> + mouse turn in the air = <b>air strafe</b> for more speed</li>
+      <li><kbd>G</kbd> <b>Frag grenade</b> · 2 charges, refills over time · blast knocks you back</li>
+      <li><kbd>Q</kbd> <b>Blink</b> · throw the disc, press <kbd>Q</kbd> again to <b>teleport</b> to it</li>
+      <li><kbd>V</kbd> <b>Quick knife</b> · very close range · one hit = one kill · <kbd>3</kbd> to hold it</li>
+      <li><kbd>RMB</kbd> aim · <kbd>R</kbd> reload · <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> weapons · <kbd>Tab</kbd> scores</li>
+      <li>Cyan pads in the backyards launch you onto the roofs</li>
+    </ul>
+  </div>
+
   <div id="death"><div id="death-by"></div><div id="death-timer"></div></div>
   <div id="scoreboard">
     <div class="sb-card">
       <h2 id="sb-title"></h2>
-      <table><thead><tr><th>#</th><th>Player</th><th>Score</th><th>K</th><th>D</th><th>Best streak</th><th>Rounds won</th><th></th></tr></thead><tbody id="sb-body"></tbody></table>
+      <table><thead><tr><th>#</th><th>Player</th><th>Score</th><th>K</th><th>D</th><th>Best streak</th><th>Rounds</th><th></th></tr></thead><tbody id="sb-body"></tbody></table>
       <p id="sb-footer"></p>
     </div>
   </div>
@@ -97,7 +122,8 @@
     <p id="pause-room" class="hint"></p>
     <button id="resume" class="big">RESUME</button>
     <button id="copy-link" class="alt">Copy invite link</button>
-    <div class="row" id="pause-bots-row"><label>Bots <b id="pause-bots-val"></b></label><input id="pause-bots" type="range" min="0" max="9" step="1"></div>
+    <div id="pause-bots-row"><div class="row"><label>Bots <b id="pause-bots-val"></b></label><input id="pause-bots" type="range" min="0" max="9" step="1"></div>
+    <div class="row"><label>Difficulty <b id="pause-diff-val"></b></label><input id="pause-diff" type="range" min="0" max="3" step="1"></div></div>
     <button id="quit" class="ghost">Leave match</button>
   </div>
 </div>
