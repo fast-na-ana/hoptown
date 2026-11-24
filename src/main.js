@@ -162,7 +162,10 @@ const preview = new MenuPreview($('preview'));
 preview.mapId = selMap;
 paintSel();
 if (!params.has('nopreview')) preview.start();
-$('room').value = params.get('room') || '';
+// room codes are case-insensitive: everything is upper-cased and stripped to A–Z / 0–9
+const normRoom = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+$('room').value = normRoom(params.get('room'));
+$('room').addEventListener('input', () => { const el = $('room'), at = el.selectionStart, v = normRoom(el.value); if (v !== el.value) { el.value = v; try { el.setSelectionRange(at, at); } catch { } } });
 
 function bindRange(id, key, fmt = (v) => v) {
   const el = $(id), out = $(id + '-val');
@@ -219,12 +222,13 @@ async function start(mode) {
   initAudio(); setVolume(settings.volume);
   const opts = commonOpts();
   if (mode === 'online') {
-    let room = ($('room').value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    let room = normRoom($('room').value);
     if (!room) room = randRoom();
     $('room').value = room;
     $('status').textContent = 'Connecting to room ' + room + '…';
     const net = (params.has('local') ? new LocalNet() : new RtcNet());
-    try { await net.connect(room, { deafMs: +(params.get('deaf') || 0), idPrefix: params.get('idp') || undefined }); }
+    const testNet = params.has('test') ? { relays: params.get('relay') ? [params.get('relay')] : undefined, noP2P: params.has('nop2p') } : {};
+    try { await net.connect(room, { deafMs: +(params.get('deaf') || 0), idPrefix: params.get('idp') || undefined, ...testNet }); }
     catch (e) { console.error(e); $('status').textContent = 'Could not connect: ' + (e.message || e); return; }
     opts.net = net; opts.roomCode = room;
     const url = new URL(location.href); url.searchParams.set('room', room);
@@ -268,7 +272,7 @@ $('copy-link').onclick = async () => {
 };
 $('quit').onclick = () => leaveToMenu();
 $('pause-bots').oninput = () => { $('pause-bots-val').textContent = $('pause-bots').value; if (game && game.isHost) game.setBotCount(+$('pause-bots').value); store.set('bots', +$('pause-bots').value); $('bots').value = $('pause-bots').value; $('bots-val').textContent = $('bots').value; renderPause(); };
-if (params.get('room')) $('room-hint').textContent = 'You were invited to room ' + params.get('room') + '. Hit JOIN.';
+if (params.get('room')) $('room-hint').textContent = 'You were invited to room ' + normRoom(params.get('room')) + '. Hit JOIN.';
 
 // ---------------------------------------------------------------- input
 const canvas = $('game');
@@ -323,9 +327,10 @@ function renderPause() {
   if (online) {
     if ($('code-val')) $('code-val').textContent = game.roomCode;
     const ns = game.netStatus();
+    const sig = Object.entries(ns.sig || {}).map(([k, v]) => `${k} ${v}`).join(' · ');
     $('net-status').textContent = ns.peers
-      ? `● Connected · ${ns.peers + 1} players · host: ${ns.hostName}`
-      : `● Searching for other players… (via ${ns.networks.join(' + ') || 'network'}). Friends join with the same code.`;
+      ? `● Connected · ${ns.peers + 1} players · host: ${ns.hostName}${ns.relayed ? ` · ${ns.relayed} via relay (your network blocks direct links)` : ''}`
+      : `● Searching for other players… Friends join with the same code. Networks: ${sig || '…'} · relay ${ns.brokers}${ns.error ? ' · ' + String(ns.error).slice(0, 80) : ''}`;
   }
   if (!$('pause')._painted) { pMap = game.mapId; pMode = game.mode; pRules = { ...game.rules }; paintSel(); $('pause')._painted = true; }
   $('bots-readonly').style.display = host ? 'none' : '';
@@ -336,7 +341,7 @@ function renderPause() {
     $('plist').innerHTML = rows.map(r => `<div class="prow">
       <span class="dot" style="background:${r.color}"></span><b>${escHtml(r.name)}</b>
       ${r.me ? '<i class="tag">YOU</i>' : ''}${r.host ? '<i class="tag host">HOST</i>' : ''}${r.afk ? '<i class="tag afk">AFK</i>' : ''}
-      <span class="ping">${r.me ? '' : (r.ping ? r.ping + 'ms' : '…')}</span>
+      <span class="ping">${r.me ? '' : (r.ping ? r.ping + 'ms' : '…')}${r.relay ? ' · relay' : ''}</span>
       ${host && !r.me ? `<button class="mini" data-act="${r.afk ? 'return' : 'afk'}" data-id="${r.id}">${r.afk ? 'RETURN' : 'AFK BOX'}</button><button class="mini red" data-act="kick" data-id="${r.id}">KICK</button>` : ''}
     </div>`).join('');
     $('plist-hint').textContent = host

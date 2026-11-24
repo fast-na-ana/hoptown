@@ -1004,7 +1004,7 @@ export class Game {
 
   playerList() {
     return [...this.players.values()].filter(p => !p.isBot).map(p => ({
-      id: p.id, name: p.name, color: this.displayColor(p), me: p.isLocal, host: p.id === this.hostId, afk: p.afk, ping: p.ping, team: p.team,
+      id: p.id, name: p.name, color: this.displayColor(p), me: p.isLocal, host: p.id === this.hostId, afk: p.afk, ping: p.ping, team: p.team, relay: !p.isLocal && !!this.net && this.net.isRelayed(p.id),
     }));
   }
 
@@ -1225,8 +1225,8 @@ export class Game {
   netStatus() {
     if (!this.net) return null;
     const peers = this.net.peerIds().length, h = this.players.get(this.hostId);
-    const info = this.net.info ? this.net.info() : { networks: [] };
-    return { peers, host: this.isHost, hostName: this.isHost ? 'you' : (h ? h.name : '…'), networks: info.networks };
+    const info = this.net.info();
+    return { peers, host: this.isHost, hostName: this.isHost ? 'you' : (h ? h.name : '…'), ...info };
   }
 
   _sendRoster(force) {
@@ -1446,7 +1446,8 @@ export class Game {
     if (this.isHost) this._hostMatch(dt);
     else this.match.t -= dt;
     if (this.net) {
-      if (this.time - this.lastStateSend > 0.05) {
+      // ~20 Hz direct; ~12 Hz when anyone is on the relay (public brokers, be gentle)
+      if (this.time - this.lastStateSend > (this.net.anyRelayed() ? 0.08 : 0.05)) {
         this.lastStateSend = this.time;
         this.net.send('st', this._stateOf(L));
         if (this.isHost && this.bots.length) this.net.send('bs', this.bots.map(b => this._stateOf(b.p)));
