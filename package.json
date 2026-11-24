@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Hoptown - fast-movement browser arena FPS (Three.js + Trystero P2P)",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --format=esm --target=es2020 --outfile=dist/game.js --minify --legal-comments=none",
+    "build": "rm -rf dist/chunks && esbuild src/main.js --bundle --splitting --format=esm --target=es2020 --outdir=dist --entry-names=game --chunk-names=chunks/[name]-[hash] --minify --legal-comments=none",
     "serve": "python3 -m http.server 8123"
   },
   "author": "",
@@ -12,6 +12,8 @@
     "@fontsource-variable/archivo": "^5.3.0",
     "@fontsource/archivo-black": "^5.3.0",
     "@fontsource/space-mono": "^5.3.0",
+    "@trystero-p2p/mqtt": "^0.27.0",
+    "@trystero-p2p/torrent": "^0.27.0",
     "esbuild": "^0.28.2",
     "puppeteer-core": "^25.18.1",
     "three": "^0.170.0",

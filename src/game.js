@@ -1014,12 +1014,13 @@ export class Game {
     this.roomCode = this.opts.roomCode;
     const hello = (to) => net.send('hello', { n: this.local.name, c: this.local.color }, to);
     hello();
-    net.onJoin((id) => { hello(id); this._electHost(); if (this.isHost) { this._sendMatch(); this._sendRoster(true); if (this.plant) { this.plant._send(); this.plant._sendEcon(); } } });
+    net.onJoin((id) => { hello(id); if (this.isHost) { this._announceHost(id); this._sendSync(id); } });
     net.onLeave((id) => {
       const p = this.players.get(id);
       if (p) this.hud.feedText(`${p.name} left`, '#aaa');
       for (const q of [...this.players.values()]) if (q.id === id || (q.isBot && q.owner === id)) this.removePlayer(q.id);
-      this._electHost();
+      this.hostClaims.delete(id);
+      if (id === this.hostId) this._hostLost();
       if (this.isHost && this.teams) this._balanceTeams();
     });
     net.on('hello', (d, from) => {
@@ -1154,28 +1155,78 @@ export class Game {
     net.on('pla', (d, from) => { if (this.isHost && this.plant) this.plant.hostAction(from, d.k, d.p); });
     net.on('plp', (d) => { const p = this.players.get(d.id); if (p) sfx.plantStart(this.posOf(p)); });
     net.on('restart', (d, from) => { if (from === this.hostId) this.applyMatchSettings(d.mp, d.mo, false, d.ru || null); });
+    net.on('host', (d, from) => this._onHostClaim(from, +d.age || 0));
+    net.on('sync', (d, from) => { if (this.isHost) { this._announceHost(from); this._sendSync(from); } else if (this.hostId === this.selfId) this._becomeHost(); });
     net.on('ping', (d, from) => net.send('pong', d, from));
     net.on('pong', (d, from) => { const p = this.players.get(from); if (p) p.ping = Math.round((now() - d) * 1000); });
-    this._electHost();
+    // everyone starts as the host of their own game; when two hosts meet, the one that has been
+    // hosting longest keeps the room and the other joins it (see _onHostClaim)
+    this.hostClaims = new Map(); this.hostFailed = new Set();
+    this._becomeHost(true);
   }
 
-  _electHost() {
-    if (!this.net) return;
-    const ids = [this.selfId, ...this.net.peerIds()].sort();
-    const prev = this.hostId;
-    this.hostId = ids[0];
-    if (prev !== this.hostId) {
-      if (this.isHost) {
-        this.botCount = this.botCount ?? this.opts.bots;
-        // take over: drop bots owned by the old host, spawn our own
-        for (const p of [...this.players.values()]) if (p.isBot && p.owner !== this.selfId) this.removePlayer(p.id);
-        this._ensureBots();
-        this._sendMatch();
-      } else {
-        for (const b of [...this.bots]) this.removePlayer(b.p.id);
-      }
+  // ---------------------------------------------------------------- host election
+  // Rule: the host that has been hosting longest wins (ties: lower id). Hosts announce their age
+  // every second; ages are relative, so clocks on different machines never need to agree. A newly
+  // joined player therefore never takes over an existing room, and two rooms that formed while the
+  // signalling networks were slow merge into one as soon as their players can see each other.
+  _beats(a, startA, b, startB) { return startA < startB - 0.25 || (Math.abs(startA - startB) <= 0.25 && a < b); }
+  _announceHost(to) { if (this.net && this.isHost) this.net.send('host', { age: r2(now() - this.hostSince) }, to); this.lastHostSend = now(); }
+  _onHostClaim(from, age) {
+    const start = now() - age;
+    this.hostClaims.set(from, start); this.hostFailed.delete(from);
+    if (from === this.hostId) { this.hostHeard = now(); return; }
+    if (this.isHost) {
+      if (this._beats(from, start, this.selfId, this.hostSince)) this._follow(from);
+      else this._announceHost(from);                              // tell them to join us instead
+    } else {
+      const cur = this.hostClaims.get(this.hostId);
+      if (cur === undefined || this._beats(from, start, this.hostId, cur)) this._follow(from);
     }
-    if (this.isHost) this._ensureBots();
+  }
+  _follow(id) {
+    if (id === this.hostId) return;
+    const wasHost = this.isHost;
+    this.hostId = id; this.hostHeard = now();
+    for (const p of [...this.players.values()]) if (p.isBot && p.owner !== id) this.removePlayer(p.id);
+    const h = this.players.get(id);
+    if (wasHost) this.hud.feedText(`Joined ${h ? h.name : 'the host'}'s game in room ${this.roomCode}`, '#ffd60a');
+    this.net.send('sync', {}, id);                                 // host replies with match, roster and state
+  }
+  _becomeHost(initial = false) {
+    const was = this.isHost && !initial;
+    this.hostId = this.selfId; this.hostSince = now();
+    this.botCount = this.botCount ?? this.opts.bots;
+    for (const p of [...this.players.values()]) if (p.isBot && p.owner !== this.selfId) this.removePlayer(p.id);
+    this._ensureBots();
+    if (!initial && !was) { this.hud.feedText('You are now the host', '#ffd60a'); this._sendMatch(); this._sendRoster(true); }
+    this._announceHost();
+  }
+  // the host left or went silent: the lowest id among those still here takes over
+  _hostLost() {
+    if (!this.net) return;
+    const lost = this.hostId;
+    if (lost !== this.selfId) this.hostFailed.add(lost);
+    const ids = [this.selfId, ...this.net.peerIds()].filter(id => id !== lost && !this.hostFailed.has(id)).sort();
+    const pick = ids[0] || this.selfId;
+    if (pick === this.selfId) this._becomeHost();
+    else {
+      this.hostId = pick; this.hostHeard = now();
+      for (const p of [...this.players.values()]) if (p.isBot && p.owner !== pick) this.removePlayer(p.id);
+      this.net.send('sync', {}, pick);
+    }
+  }
+  _sendSync(to) {
+    this._sendMatch(); this._sendRoster(true);
+    if (this.plant) { this.plant._send(); this.plant._sendEcon(); }
+    if (this.brk.list.length) this.net.send('brkall', this.brk.snapshot(), to);
+  }
+  // shown in the pause menu
+  netStatus() {
+    if (!this.net) return null;
+    const peers = this.net.peerIds().length, h = this.players.get(this.hostId);
+    const info = this.net.info ? this.net.info() : { networks: [] };
+    return { peers, host: this.isHost, hostName: this.isHost ? 'you' : (h ? h.name : '…'), networks: info.networks };
   }
 
   _sendRoster(force) {
@@ -1401,6 +1452,9 @@ export class Game {
         if (this.isHost && this.bots.length) this.net.send('bs', this.bots.map(b => this._stateOf(b.p)));
       }
       if (this.isHost && this.time - this.lastRosterSend > 2) this._sendRoster();
+      if (this.isHost && now() - (this.lastHostSend || 0) > 1) this._announceHost();
+      if (now() - (this.lastHello || 0) > 3) { this.lastHello = now(); this.net.send('hello', { n: this.local.name, c: this.local.color }); }
+      if (!this.isHost && now() - this.hostHeard > 6) this._hostLost();      // host silent: take over / pick next
       if (!this._lastPing || this.time - this._lastPing > 2) { this._lastPing = this.time; this.net.send('ping', now()); }
     }
 

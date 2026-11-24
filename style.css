@@ -141,7 +141,17 @@ table.controls td:nth-child(odd) { white-space: nowrap; width: 1%; }
 
 /* pause */
 #pause { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(17,17,17,0.55); color: var(--k); }
-.pause-card { width: min(440px, 94vw); max-height: 94vh; overflow: auto; display: flex; flex-direction: column; gap: 14px; background: var(--y); }
+.pause-card { width: min(940px, 96vw); max-height: 96vh; overflow: visible; display: flex; flex-direction: column; gap: 12px; background: var(--y); padding: 18px 20px; }
+.pause-card.single { width: min(500px, 96vw); }
+.pause-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.pause-card.single .pause-cols { grid-template-columns: 1fr; }
+.pcol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.copyrow { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.copyrow .btn { margin: 0; }
+#copy-code b { font-family: 'Space Mono', monospace; letter-spacing: 2px; }
+#net-status { font-size: 11px; }
+#pause-match .field { margin-bottom: 10px; }
+@media (max-width: 720px) { .pause-cols { grid-template-columns: 1fr; } .pause-card { overflow: auto; } }
 .pause-card .card-head { margin-bottom: 0; }
 .pause-card .num { background: #fff; }
 .pause-card .hint { margin: 0; }
@@ -361,7 +371,7 @@ table.controls td:nth-child(odd) { white-space: nowrap; width: 1%; }
 .pbox { background: #fff; border: var(--bd); border-radius: 12px; padding: 12px 12px 2px; }
 .pbox > .lbl { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; margin-bottom: 8px; }
 #pause-online { display: flex; flex-direction: column; gap: 14px; }
-#plist { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; max-height: 210px; overflow: auto; }
+#plist { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; max-height: 190px; overflow: auto; }
 .prow { display: flex; align-items: center; gap: 6px; font-size: 14px; padding: 5px 6px; border: 2px solid var(--k); border-radius: 8px; background: var(--g0); }
 .prow .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--k); flex-shrink: 0; }
 .prow b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
@@ -482,3 +492,5 @@ table.controls td:nth-child(odd) { white-space: nowrap; width: 1%; }
 .slot.charge { background: #ff7a3d; }
 .slot.charge i { width: auto; padding: 0 3px; }
 #pause-map-seg { grid-template-columns: repeat(2, 1fr); }
+.pause-card .mode-row { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
+.pause-card .mode-row .seg { flex: 1; }

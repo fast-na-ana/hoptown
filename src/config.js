@@ -136,3 +136,7 @@ export const STREAKS = {
 };
 
 export const COLORS = ['#ff5a5f', '#3ec1ff', '#ffd23f', '#7bdb6a', '#c77dff', '#ff9f43', '#4ef0d0', '#ff6fb5', '#a0a8ff', '#e8e8e8'];
+
+// Online play. TURN relays let players behind strict NATs connect; add your own here, e.g.
+// { urls: 'turn:global.relay.metered.ca:80', username: '…', credential: '…' } (free tiers exist).
+export const NET = { turn: [] };

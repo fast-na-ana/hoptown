@@ -224,7 +224,7 @@ async function start(mode) {
     $('room').value = room;
     $('status').textContent = 'Connecting to room ' + room + '…';
     const net = (params.has('local') ? new LocalNet() : new RtcNet());
-    try { await net.connect(room); }
+    try { await net.connect(room, { deafMs: +(params.get('deaf') || 0), idPrefix: params.get('idp') || undefined }); }
     catch (e) { console.error(e); $('status').textContent = 'Could not connect: ' + (e.message || e); return; }
     opts.net = net; opts.roomCode = room;
     const url = new URL(location.href); url.searchParams.set('room', room);
@@ -257,6 +257,11 @@ function leaveToMenu(msg = '') {
 $('play-bots').onclick = () => start('offline');
 $('play-online').onclick = () => start('online');
 $('resume').onclick = () => { $('pause').style.display = 'none'; lock(); };
+$('copy-code').onclick = async () => {
+  const code = game && game.roomCode; if (!code) return;
+  const b = $('copy-code'); try { await navigator.clipboard.writeText(code); b.innerHTML = 'COPIED ✓'; } catch { b.innerHTML = `ROOM CODE · <b>${code}</b>`; }
+  setTimeout(() => { b.innerHTML = `COPY ROOM CODE · <b id="code-val">${code}</b>`; }, 1500);
+};
 $('copy-link').onclick = async () => {
   try { await navigator.clipboard.writeText(location.href); $('copy-link').textContent = 'COPIED ✓'; } catch { $('copy-link').textContent = location.href; }
   setTimeout(() => $('copy-link').textContent = 'COPY INVITE LINK', 1500);
@@ -313,6 +318,15 @@ function renderPause() {
   $('pause-online').style.display = online ? '' : 'none';
   $('pause-bots-row').style.display = host ? '' : 'none';
   $('pause-match').style.display = host ? '' : 'none';
+  $('pause-host-col').style.display = host ? '' : 'none';
+  document.querySelector('.pause-card').classList.toggle('single', !host);
+  if (online) {
+    if ($('code-val')) $('code-val').textContent = game.roomCode;
+    const ns = game.netStatus();
+    $('net-status').textContent = ns.peers
+      ? `● Connected · ${ns.peers + 1} players · host: ${ns.hostName}`
+      : `● Searching for other players… (via ${ns.networks.join(' + ') || 'network'}). Friends join with the same code.`;
+  }
   if (!$('pause')._painted) { pMap = game.mapId; pMode = game.mode; pRules = { ...game.rules }; paintSel(); $('pause')._painted = true; }
   $('bots-readonly').style.display = host ? 'none' : '';
   $('bots-readonly').textContent = host ? '' : `${game.map.info.name} · ${MODES[game.mode].short} · BOTS ${game.botCount} · ${DIFF_NAMES[Math.max(0, DIFFICULTIES.indexOf(game.difficulty))]} · ${fmtTime(game.rules.time)} · ${fmtLimit(game.mode, game.rules.limit)} · RESPAWN ${game.rules.respawn}s (set by host)`;
