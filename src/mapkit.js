@@ -11,7 +11,7 @@ const RANK = {
   plaster: 4, ochre: 4, terracotta: 4, picket: 5, dark: 5, white: 5, blueTrim: 5, canvasRed: 6, canvasBlue: 6,
   trim: 6, orange: 6, lamp: 6, pad: 6, flowers: 6, glass: 7, afkglass: 7, water: 2,
   slab: 0, shellconc: 2, corrugated: 3, roofsheet: 2, truss: 4, skylight: 5, plywood: 3, drywall: 3, sandbag: 3, pallet: 3,
-  contA: 3, contB: 3, hazard: 6, paintA: 6, paintB: 6, targetRed: 6, barrel: 3,
+  contA: 3, contB: 3, hazard: 6, saltcrust: 1, mudflat: 1, whitewash: 4, tarwood: 4, rust: 4, bdoor: 5, bpanel: 5, bglass: 7, buoy: 6, net: 6, paintA: 6, paintB: 6, targetRed: 6, barrel: 3,
   shutterA: 6, shutterB: 6, sandbox: 2, soil: 2, veg: 4, cream: 4, steel: 5, farGrass: 0, farHouse: 4, farRoof: 5, cloth: 6, rope: 6, stripeA: 6, stripeB: 6,
 };
 
@@ -35,6 +35,10 @@ const MAT_DEFS = {
   contA: { tex: 'metal', uv: 1.2, color: '#c9563e' }, contB: { tex: 'metal', uv: 1.2, color: '#2f7193' }, hazard: { color: '#ffd60a' }, paintA: { color: '#ff7a3d' }, paintB: { color: '#3ec1ff' },
   targetRed: { color: '#d8332b' }, barrel: { color: '#3d6e4a' }, steel: { color: '#a9b2bd' }, farGrass: { tex: 'grass', uv: 8 }, farHouse: { color: '#d9d2c4' },
   farRoof: { color: '#6d5a50' }, cloth: { color: '#e8eef5' }, rope: { color: '#cdb79a' }, stripeA: { color: '#ff7a3d' }, stripeB: { color: '#3ec1ff' },
+  // salt works
+  saltcrust: { tex: 'concrete', uv: 4, color: '#efece4' }, mudflat: { dtex: 'sand', uv: 4, color: '#a39c88' }, whitewash: { dtex: 'plaster', uv: 3, color: '#fbf8f2' },
+  tarwood: { tex: 'wood', uv: 2.5, color: '#7d7872' }, rust: { tex: 'metal', uv: 2, color: '#b06a44' }, buoy: { color: '#ff6a2b' }, net: { color: '#4a6b5d' },
+  bdoor: { color: '#5d6873' }, bpanel: { color: '#b9bec4' }, bglass: { color: '#dff4ff' },
   // desert
   sand: { dtex: 'sand', uv: 5 }, sandstone: { dtex: 'sandstone', uv: 3 }, sandstoneDark: { dtex: 'sandstoneDark', uv: 3 },
   plaster: { dtex: 'plaster', uv: 3 }, ochre: { dtex: 'ochre', uv: 3 }, terracotta: { dtex: 'terracotta', uv: 3 },
@@ -47,6 +51,7 @@ const TEX_COL = {
   wood: '#9a6b3e', fence: '#a57a4e', roof: '#5a4a44', interior: '#d9d0bf', hedge: '#3f7a34', metal: '#8a9099', crate: '#9a6b3e',
   sand: '#d9b77e', sandstone: '#d6b07a', sandstoneDark: '#a98656', plaster: '#e6dcc8', ochre: '#c88a3c', terracotta: '#b85c38',
   tile: '#3f8fa8', canvasRed: '#c0473a', canvasBlue: '#3a6fb0', farGrass: '#5f9a3e',
+  saltcrust: '#efece4', mudflat: '#8f8875', whitewash: '#f4f1ea', tarwood: '#6d6a66', rust: '#a5603a',
 };
 export function debrisColor(mat) { return TEX_COL[mat] || (MAT_DEFS[mat] && MAT_DEFS[mat].color) || '#9a9a9a'; }
 const SOFT = new Set(['grass', 'sand', 'hedge', 'soil', 'veg', 'farGrass', 'sandbox', 'flowers', 'cloth', 'canvasRed', 'canvasBlue']);

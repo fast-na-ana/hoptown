@@ -2,10 +2,11 @@
 import * as maple from './maple.js';
 import * as sunstone from './sunstone.js';
 import * as drill from './drill.js';
+import * as saltworks from './saltworks.js';
 import { STAIR_LOG } from '../mapkit.js';
 
-export const MAPS = { maple, sunstone, drill };
-export const MAP_LIST = [maple.info, sunstone.info, drill.info];
+export const MAPS = { maple, sunstone, drill, saltworks };
+export const MAP_LIST = [maple.info, sunstone.info, drill.info, saltworks.info];
 
 export function buildMap(id, world, scene) {
   const m = MAPS[id] || MAPS.maple;
@@ -16,5 +17,5 @@ export function buildMap(id, world, scene) {
   return built;
 }
 
-// maps that have plant sites (plant & defuse is Sunstone-only for now)
-export const PLANT_MAPS = ['sunstone'];
+// maps that have plant sites (the first is the default for plant & defuse)
+export const PLANT_MAPS = ['saltworks', 'sunstone'];

@@ -117,7 +117,7 @@ $('pause-rules').addEventListener('click', (e) => {
   stepRule(pRules, pMode, b.dataset.k, +b.dataset.d); paintSel();
 });
 function paintSel() {
-  document.querySelectorAll('#map-sel .mapbtn').forEach(b => { b.classList.toggle('on', b.dataset.map === selMap); b.classList.toggle('na', !mapOk(b.dataset.map, selMode)); b.title = mapOk(b.dataset.map, selMode) ? '' : 'Plant & defuse is Sunstone-only for now'; });
+  document.querySelectorAll('#map-sel .mapbtn').forEach(b => { b.classList.toggle('on', b.dataset.map === selMap); b.classList.toggle('na', !mapOk(b.dataset.map, selMode)); b.title = mapOk(b.dataset.map, selMode) ? '' : 'Plant & defuse runs on Saltworks and Sunstone'; });
   document.querySelectorAll('#pause-map-seg button').forEach(b => { b.classList.toggle('na', !mapOk(b.dataset.map, pMode)); });
   document.querySelectorAll('#mode-seg button').forEach(b => b.classList.toggle('on', b.dataset.m === selMode));
   const mi = MAP_LIST.findIndex(m => m.id === selMap);
