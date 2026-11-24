@@ -287,6 +287,13 @@ export class Hud {
     n.textContent = text; n.style.opacity = 1; n.classList.remove('pop'); void n.offsetWidth; n.classList.add('pop');
     this.noticeT = 1.4;
   }
+  // small "+1 KILL" chip under the crosshair; quick multi-kills stack into one chip
+  killPop(reward, head) {
+    const n = $('killpop'), now = performance.now();
+    this.kpN = now - (this.kpT || 0) < 1600 ? (this.kpN || 0) + 1 : 1; this.kpT = now;
+    n.innerHTML = `<b>+${this.kpN} KILL${this.kpN > 1 ? 'S' : ''}</b>${head ? '<i>HS</i>' : ''}${reward ? `<span>${esc(reward)}</span>` : ''}`;
+    n.classList.remove('kp'); void n.offsetWidth; n.classList.add('kp');
+  }
   damageFrom(angle) {
     const d = document.createElement('div');
     d.className = 'dmg-ind';

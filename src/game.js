@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { SIM_DT, PLAYER, MOVE, WEAPONS, GRENADE, BLINK, MATCH, STREAKS, COLORS, KNIFE, PRIMARIES, SECONDARIES, GUNS, DEFAULT_LOADOUT, PLANT } from './config.js';
 import { World, rayBox } from './physics.js';
 import { buildMap, PLANT_MAPS } from './maps/index.js';
+import { Breakables } from './breakables.js';
 import { MODES, TEAMS, FLAG, other, resolveRules } from './modes.js';
 import { Minimap } from './minimap.js';
 import { makeMoveState, emptyInput, stepMovement, findFreeSpot } from './movement.js';
@@ -16,7 +17,7 @@ import { PlantMode } from './plant.js';
 import { loadoutHtml, LOADOUT_KEYS } from './panels.js';
 
 // sheet materials bullets go through (with reduced damage)
-const PENETRABLE = new Set(['plywood', 'drywall']);
+const PENETRABLE = new Set(['plywood', 'drywall', 'bglass']);
 
 const now = () => performance.now() / 1000;
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -61,6 +62,7 @@ export class Game {
     this.vm = new ViewModel(opts.color, renderer);
     this.hud = new Hud();
     this.minimap = new Minimap(this);
+    this.brk = new Breakables(this, this.map.breakables);
 
     this.plant = MODES[this.mode].plant && this.map.plant ? new PlantMode(this) : null;
     this.panelOpen = null;
@@ -306,14 +308,17 @@ export class Game {
       this.scene.remove(this.map.group);
       this.map.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); });
       this.world = new World();
+      this.brk.dispose();
       this.map = buildMap(this.mapId, this.world, this.scene);
       this._applyEnv();
       this.effects.clearHoles();
       this.minimap.rebuild();
+      this.brk = new Breakables(this, this.map.breakables);
     }
     for (const b of this.bots) { b.path = []; b.pi = 0; b.target = null; }
     if (this.plant) { this.plant.dispose(); this.plant = null; }
     if (MODES[this.mode].plant && this.map.plant) this.plant = new PlantMode(this);
+    if (this.isHost) this.brk.resetAll();
     this.setPanel(null);
     this._initFlags();
     this.teamScore = { A: 0, B: 0 };
@@ -521,7 +526,7 @@ export class Game {
         let ex = Infinity;
         for (let i = 0; i < 3; i++) if (Math.abs(d[i]) > 1e-6) ex = Math.min(ex, ((d[i] > 0 ? b.max[i] : b.min[i]) - q[i]) / d[i]);
         const tOut = tIn + Math.max(0, Math.min(ex, 1.5));
-        layers.push({ tIn, tOut, normal: h.normal, box: b });
+        layers.push({ tIn, tOut, normal: h.normal, box: b, keep: b.mat === 'bglass' ? 0.95 : keep });
         gone = tOut + 0.02; from = [eye[0] + d[0] * gone, eye[1] + d[1] * gone, eye[2] + d[2] * gone];
         continue;
       }
@@ -537,7 +542,7 @@ export class Game {
       if (rb && rb.t < bestT) { bestT = rb.t; target = o; head = false; }
     }
     let mult = 1;
-    for (const l of layers) if (l.tIn < bestT) mult *= keep;
+    for (const l of layers) if (l.tIn < bestT) mult *= l.keep;
     return { wh, t: bestT, target, head, mult, layers: layers.filter(l => l.tIn < bestT), eye, d, point: [eye[0] + d[0] * bestT, eye[1] + d[1] * bestT, eye[2] + d[2] * bestT] };
   }
 
@@ -562,6 +567,7 @@ export class Game {
         const pin = [r.eye[0] + r.d[0] * l.tIn, r.eye[1] + r.d[1] * l.tIn, r.eye[2] + r.d[2] * l.tIn];
         const pout = [r.eye[0] + r.d[0] * l.tOut, r.eye[1] + r.d[1] * l.tOut, r.eye[2] + r.d[2] * l.tOut];
         this.effects.impact(pin, l.normal, l.box.mat, n > 1 ? 0.4 : 0.8);
+        if (l.box.brk) { this.brk.hit(l.box, W.damage); continue; }
         this.effects.hole(pin, l.normal, n > 1 ? 0.6 : 0.9);
         this.effects.hole(pout, l.normal.map(v => -v), n > 1 ? 0.6 : 0.9);
         if (n === 1) this.effects.burst(pout, 4, '#d8c49a', 2.2, 0.4, r.d, 8, 0.05);
@@ -574,7 +580,8 @@ export class Game {
         h.dmg += dmg; h.head = h.head || r.head; hits.set(r.target, h);
       } else if (r.wh && r.wh.box.tag !== 'invisible') {
         this.effects.impact(r.point, r.wh.normal, r.wh.box.mat, n > 1 ? 0.5 : W.heavy || p.weapon === 'sniper' ? 1.6 : 1);
-        if (r.wh.box.tag !== 'angled') this.effects.hole(r.point, r.wh.normal, p.weapon === 'sniper' || W.heavy ? 1.5 : p.weapon === 'pistol' ? 0.85 : n > 1 ? 0.6 : 1);
+        if (r.wh.box.brk) this.brk.hit(r.wh.box, W.damage);
+        else if (r.wh.box.tag !== 'angled') this.effects.hole(r.point, r.wh.normal, p.weapon === 'sniper' || W.heavy ? 1.5 : p.weapon === 'pistol' ? 0.85 : n > 1 ? 0.6 : 1);
       }
     }
     p.mag[p.weapon]--;
@@ -737,7 +744,8 @@ export class Game {
     this.hud.addFeed(k ? k.name : null, k ? this.displayColor(k) : '#fff', v.name, this.displayColor(v), msg.w, !!msg.h);
     if (k && k.isLocal) {
       sfx.kill();
-      this.hud.notice(`+${MATCH.scoreKill + (msg.h ? MATCH.scoreHeadshotBonus : 0)}  ELIMINATED ${v.name}${msg.h ? ' · HEADSHOT' : ''}`);
+      const cash = this.plant && v.team && k.team !== v.team && (this.plant.ph === 'live' || this.plant.ph === 'planted');
+      this.hud.killPop(cash ? `+$${msg.w === 'knife' ? PLANT.knifeKill : PLANT.kill}` : `+${MATCH.scoreKill + (msg.h ? MATCH.scoreHeadshotBonus : 0)}`, !!msg.h);
       if (STREAKS[k.streak]) { this.hud.announce(STREAKS[k.streak], `${k.streak} kill streak`); sfx.streak(); }
     }
     if (v.isLocal) { this.deathCam = { from: [...v.ms.pos], killer: k ? k.id : null, t: 0 }; }
@@ -868,6 +876,7 @@ export class Game {
   explode(pos, ownerId) {
     this.effects.explosion(pos);
     sfx.boom(pos);
+    this.brk.blast(pos, GRENADE.radius, 260);
     if (this.local.alive) {
       const lp = this.local.ms.pos;
       const d = Math.hypot(lp[0] - pos[0], lp[1] + 1 - pos[1], lp[2] - pos[2]);
@@ -1016,7 +1025,7 @@ export class Game {
     net.on('hello', (d, from) => {
       if (this.kicked.has(from)) return;
       let p = this.players.get(from);
-      if (!p) { p = this.addPlayer(from, { name: d.n, color: d.c, owner: from }); this.hud.feedText(`${d.n} joined`, d.c); if (this.isHost && this.teams) this._balanceTeams(); }
+      if (!p) { p = this.addPlayer(from, { name: d.n, color: d.c, owner: from }); this.hud.feedText(`${d.n} joined`, d.c); if (this.isHost && this.teams) this._balanceTeams(); if (this.isHost && this.brk.list.length) net.send('brkall', this.brk.snapshot(), from); }
       else if (p.name !== d.n || p.color !== d.c) { p.name = d.n; p.color = d.c; p.avatar.setName(d.n, d.c); }
       p.lastSeen = now();
     });
@@ -1085,11 +1094,11 @@ export class Game {
         const h = this.world.raycast(d.o[0], d.o[1], d.o[2], dx / dl, dy / dl, dz / dl, dl + 0.2);
         if (h && PENETRABLE.has(h.box.mat) && h.t < dl - 0.25) {
           const q = [d.o[0] + dx / dl * h.t, d.o[1] + dy / dl * h.t, d.o[2] + dz / dl * h.t];
-          this.effects.impact(q, h.normal, h.box.mat, 0.6); this.effects.hole(q, h.normal, 0.8);
+          this.effects.impact(q, h.normal, h.box.mat, 0.6); if (!h.box.brk) this.effects.hole(q, h.normal, 0.8);
         }
         if (h && h.box.tag !== 'invisible' && Math.abs(h.t - dl) < 0.25) {
           this.effects.impact(e, h.normal, h.box.mat, d.es ? 0.5 : 1);
-          if (h.box.tag !== 'angled') this.effects.hole(e, h.normal, d.w === 'sniper' || W.heavy ? 1.5 : d.es ? 0.6 : 1);
+          if (h.box.tag !== 'angled' && !h.box.brk) this.effects.hole(e, h.normal, d.w === 'sniper' || W.heavy ? 1.5 : d.es ? 0.6 : 1);
         }
       });
       sfx.shot(d.w, d.o);
@@ -1134,6 +1143,10 @@ export class Game {
       f.state = d.s; f.carrier = d.c || null; if (d.p && d.s !== 'carried') f.pos = d.p;
       if (d.ev) this._flagEvent(d.t, d.ev, d.by);
     });
+    net.on('brk', (d, from) => { if (from === this.hostId && !this.isHost) this.brk.onNet(d); });
+    net.on('brkall', (d, from) => { if (from === this.hostId && !this.isHost) this.brk.onAll(d); });
+    net.on('brksw', (d) => { if (this.isHost) this.brk.hostToggle(d.id); });
+    net.on('brkhit', (d) => { if (this.isHost) this.brk.hostDamage(d.id, Math.min(600, +d.d || 0)); });
     net.on('pl', (d, from) => { if (from === this.hostId && this.plant && !this.isHost) this.plant.onNet(d); });
     net.on('pinv', (d, from) => { if (from === this.hostId && this.plant && !this.isHost) this.plant.onEcon(d); });
     net.on('buy', (d, from) => { if (this.isHost && this.plant) this.plant.hostBuy(this.players.get(from), d.i); });
@@ -1263,7 +1276,7 @@ export class Game {
       if (pressed.has('wheel')) { const i = Math.max(0, own.indexOf(L.weapon)); this.switchWeapon(L, own[(i + (this.input.wheelDir < 0 ? own.length - 1 : 1)) % own.length]); }
       if (pressed.has('KeyV') && L.weapon !== 'knife') { if (this.melee(L, aimYaw, aimPitch)) this.vm.quickKnife(); }
       if (pressed.has('KeyR')) this.reload(L);
-      if (pressed.has('KeyF') && !(this.plant && this.plant.actionAvailable(L)) && this.time >= L.reloadUntil) { this.vm.inspect(); sfx.inspect(); }
+      if (pressed.has('KeyF') && !(this.plant && this.plant.actionAvailable(L)) && !this.brk.useSwitch(L) && this.time >= L.reloadUntil) { this.vm.inspect(); sfx.inspect(); }
       if (pressed.has('KeyG')) this.throwGrenade(L, aimYaw, aimPitch);
       if (pressed.has('KeyQ') || pressed.has('KeyE')) this.blinkAction(L, aimYaw, aimPitch);
       const W = WEAPONS[L.weapon];
@@ -1403,6 +1416,7 @@ export class Game {
 
     this._updateCamera(dt, mdx, mdy);
     this.effects.update(dt, this.camera.position);
+    this.brk.update(dt);
     for (const r of this.map.padRings) { r.position.y = (r.userData.baseY || 0.3) + (this.time * 0.8 % 1) * 1.2; r.material.opacity = 0.6 * (1 - (this.time * 0.8 % 1)); }
     this._updateFlagMeshes(dt);
     this._updateHud(dt, keys);
@@ -1527,9 +1541,10 @@ export class Game {
     h.setLowHealth(L.alive && L.hp < 20, L.hp);
     h.setStreak(L.streak);
     // contextual prompt
-    let prompt = '';
+    let prompt = '', swb = null;
     const pAct = this.plant && L.alive ? this.plant.actionAvailable(L) : null;
     if (L.alive && pAct && !this.plant.hold) prompt = pAct === 'plant' ? `Hold ${h.kb('use')} to PLANT the charge` : `Hold ${h.kb('use')} to DEFUSE${L.inv && L.inv.kit ? ' (kit)' : ''}`;
+    else if (L.alive && (swb = this.brk.switchNear(L))) prompt = `Press ${h.kb('use')} to ${swb.state === 'open' ? 'CLOSE' : 'OPEN'} the blast door`;
     else if (L.alive && this.plant && this.plant.ph === 'buy' && this.panelOpen !== 'buy') prompt = `Press ${h.kb('buy')} to buy`;
     else if (L.alive) {
       if (blinkActive) prompt = `Press ${h.kb('blink')} to WARP to your disc`;

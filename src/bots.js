@@ -62,6 +62,7 @@ export class Bot {
       }
       open.delete(cur);
       for (const nb of nodes[cur].links) {
+        if (nodes[cur].blk && this.g.brk.edgeBlocked(cur, nb)) continue;   // shut blast door
         const a = nodes[cur].p, b = nodes[nb].p;
         const t = gs.get(cur) + Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
         if (t < (gs.get(nb) ?? Infinity)) { came.set(nb, cur); gs.set(nb, t); fs.set(nb, t + h(nb)); open.add(nb); }

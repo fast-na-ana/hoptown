@@ -45,6 +45,7 @@ export class World {
       for (const b of arr) {
         if (this._marks[b.id] === stamp) continue;
         this._marks[b.id] = stamp;
+        if (b.off) continue;          // dynamic box that is currently open / broken
         out.push(b);
       }
     }
@@ -107,6 +108,7 @@ export class World {
         for (const b of arr) {
           if (this._marks[b.id] === stamp) continue;
           this._marks[b.id] = stamp;
+          if (b.off) continue;
           const r = rayBox(ox, oy, oz, dx, dy, dz, b.min, b.max);
           if (r && r.t < bestT) { bestT = r.t; best = { t: r.t, box: b, normal: r.normal }; }
         }

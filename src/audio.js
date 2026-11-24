@@ -119,6 +119,13 @@ export const sfx = {
     const d = spatial(pos, 120); if (!d) return; const t = ctx.currentTime;
     noiseBurst(d, t, 0.9, 300, 0.5, 1.2, 'lowpass'); tone(d, t, 0.7, 90, 25, 1.0, 'sine'); noiseBurst(d, t, 0.3, 2500, 0.5, 0.4);
   },
+  door(pos, closing) {   // heavy hydraulic door: hiss + rumble + clunk
+    const d = spatial(pos, 45); if (!d) return; const t = ctx.currentTime;
+    noiseBurst(d, t, 0.35, 1800, 0.8, 0.25, 'highpass'); tone(d, t + 0.05, 0.6, closing ? 70 : 90, closing ? 55 : 120, 0.35, 'sawtooth');
+    if (closing) { noiseBurst(d, t + 0.6, 0.12, 400, 1, 0.6, 'lowpass'); tone(d, t + 0.6, 0.1, 120, 60, 0.4, 'square'); }
+  },
+  shatter(pos) { const d = spatial(pos, 50); if (!d) return; const t = ctx.currentTime; for (let i = 0; i < 6; i++) noiseBurst(d, t + i * 0.035, 0.12, 4500 + i * 600, 4, 0.35 - i * 0.04, 'highpass'); },
+  crumble(pos) { const d = spatial(pos, 70); if (!d) return; const t = ctx.currentTime; noiseBurst(d, t, 0.6, 500, 0.7, 0.9, 'lowpass'); noiseBurst(d, t + 0.1, 0.4, 1600, 1, 0.35); tone(d, t, 0.25, 140, 50, 0.5, 'square'); },
   blink(pos) { const d = spatial(pos, 40); if (!d) return; const t = ctx.currentTime; tone(d, t, 0.25, 1600, 200, 0.25, 'sine'); tone(d, t, 0.2, 400, 2400, 0.15, 'triangle'); },
   streak() { const d = spatial(null); if (!d) return; const t = ctx.currentTime; [523, 659, 784, 1046].forEach((f, i) => tone(d, t + i * 0.07, 0.2, f, f, 0.18, 'triangle')); },
   swing(pos) { const d = spatial(pos, 20); if (!d) return; noiseBurst(d, ctx.currentTime, 0.16, 2600, 0.7, 0.35, 'highpass'); },

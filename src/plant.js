@@ -142,6 +142,7 @@ export class PlantMode {
     this.targetSite = Math.random() < 0.5 ? 'A' : 'B';
     this.planted = false; this.last = null;
     for (const b of g.bots) this._botBuy(b);
+    g.brk.resetAll();      // doors open, panels + glass whole again
     this.ph = 'buy'; this.t = PLANT.buyTime;
     this._sendEcon(); this._send('round');
     this._onRound();
@@ -383,6 +384,7 @@ export class PlantMode {
     const g = this.g, c = this.ch.p; if (!c) return;
     g.effects.explosion([c[0], c[1] + 0.5, c[2]], true);
     sfx.bigBoom(c);
+    g.brk.blast(c, PLANT.blastRadius, 1500);
     g.view.shake = 1;
     for (const p of g.players.values()) {
       if (!p.alive || !g.ownsDamage(p)) continue;

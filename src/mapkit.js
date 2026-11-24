@@ -101,6 +101,7 @@ class GeoBucket {
 
 // 180° rotation about the origin gives perfectly fair, point-symmetric maps.
 // rot 0 = as written, 2 = 180° point symmetry, 'mz' = mirror across the z = 0 line
+export const STAIR_LOG = [];   // stairs of the map being built (for tests)
 export function tf(rot, min, max) {
   if (rot === 0) return [min, max];
   if (rot === 'mz') return [[min[0], min[1], -max[2]], [max[0], max[1], -min[2]]];
@@ -202,6 +203,11 @@ export function createKit(world) {
 
   // straight stairs: from (x,z) start, rising along +x/-x/+z/-z
   function stairs(x0, z0, width, dir, steps, rise, run, baseY, mat) {
+    // remember the space in front of the bottom step and past the top one (checked by test/stairs.mjs)
+    const L = steps * run, top = baseY + rise * steps, P = 0.9;
+    const zone = (a, b, y) => dir === '+x' ? [[x0 + a, y, z0], [x0 + b, y + 1.75, z0 + width]] : dir === '-x' ? [[x0 - b, y, z0], [x0 - a, y + 1.75, z0 + width]]
+      : dir === '+z' ? [[x0, y, z0 + a], [x0 + width, y + 1.75, z0 + b]] : [[x0, y, z0 - b], [x0 + width, y + 1.75, z0 - a]];
+    STAIR_LOG.push({ bottom: tf(B.rot, ...zone(-P, -0.02, baseY + 0.05)), top: tf(B.rot, ...zone(L + 0.02, L + P, top + 0.05)), width });
     for (let i = 0; i < steps; i++) {
       const h = baseY + rise * (i + 1);
       const a = i * run, b = (i + 1) * run;

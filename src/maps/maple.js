@@ -28,11 +28,11 @@ export function build(world, scene) {
     wall('z', X0, X0 + W, Z0 + W, Z1 - W, 0, ROOF - 0.2, [[-15.6, -14.2, F1, 2.45], [-17, -15, 4.25, 5.9]], siding);
     wall('z', X1 - W, X1, Z0 + W, Z1 - W, 0, ROOF - 0.2, [[-16.7, -14.3, 0.95, 2.85], [-15.5, -13.5, 4.25, 5.9]], siding);
     // stairs along the back wall, rising east, + upstairs floor with a stairwell
-    B.box([X0 + W, F1, Z0 + W], [-5.4, F1 + 0.32, -18.3], 'wood');
-    stairs(-5.4, Z0 + W, 1.4, '+x', 10, 0.32, 0.45, F1, 'wood');
-    B.box([-0.9, F2 - 0.2, Z0 + W], [X1 - W, F2, Z1 - W], 'wood');
-    B.box([X0 + W, F2 - 0.2, -18.2], [-0.9, F2, Z1 - W], 'wood');
-    B.box([X0 + W, F2, -18.25], [-1.5, F2 + 1.0, -18.12], 'trim');
+    // (1.3 m of floor in front of the bottom step so you can walk straight on)
+    stairs(-4.4, Z0 + W, 1.4, '+x', 10, 0.32, 0.45, F1, 'wood');
+    B.box([0.1, F2 - 0.2, Z0 + W], [X1 - W, F2, Z1 - W], 'wood');
+    B.box([X0 + W, F2 - 0.2, -18.2], [0.1, F2, Z1 - W], 'wood');
+    B.box([X0 + W, F2, -18.25], [-0.5, F2 + 1.0, -18.12], 'trim');
     wall('z', 1.9, 2.1, Z0 + W, Z1 - W, F1, F2 - 0.2, [[-16.2, -14.6, F1, 2.45]], 'interior', null);
     wall('x', -15.6, -15.4, 0.5, X1 - W, F2, ROOF - 0.2, [[2.2, 3.6, F2, F2 + 2.3]], 'interior', null);
     B.box([3, F1, -19.6], [5.6, F1 + 1.0, -18.7], 'wood');            // kitchen counter
@@ -199,7 +199,7 @@ export function build(world, scene) {
       a_gar_in: [-13.5, 0, -15.5], a_gar_front: [-11.2, 0, -11], a_gar_back: [-13.5, 0, -21.2], a_gar_side: [-9.2, 0, -15.9],
       a_porch: [0, F1, -10.2], a_h_door: [0, F1, -12.2], a_h_liv: [-3, F1, -14.6], a_h_side_in: [-5.1, F1, -14.9], a_h_side_out: [-7.1, 0, -14.9],
       a_h_divw: [1.2, F1, -15.4], a_h_dive: [2.9, F1, -15.4], a_h_east: [4, F1, -13.5], a_h_back_in: [3.5, F1, -18.2], a_h_back_out: [3.5, 0, -21],
-      a_stair_b: [-5.0, F1, -17.6], a_stair_m: [-3.0, 2.07, -19.0], a_stair_t: [-0.4, F2, -19.0],
+      a_stair_b: [-5.0, F1, -17.6], a_stair_m: [-2.1, F1 + 1.92, -19.0], a_stair_t: [0.7, F2, -19.0],
       a_up_hall: [1, F2, -17], a_up_front: [0, F2, -12.5], a_up_east: [4.5, F2, -17.5], a_up_west: [-4, F2, -13.5],
       a_roof: [0, ROOF, -15.5], a_pad: [0, 0.35, -23.2],
     },
